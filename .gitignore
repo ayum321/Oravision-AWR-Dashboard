@@ -25,3 +25,16 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Runtime data (generated at startup — not source)
+backend/uploads/
+backend/intelligence_cache/
+backend/pdf_uploads/
+
+# Zip outputs
+*.zip
+
+# Test / dev artefacts
+.pytest_cache/
+.streamlit/
+debug.log
