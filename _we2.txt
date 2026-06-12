@@ -1,0 +1,407 @@
+﻿--- buffer busy waits at char 21027 ---
+buffer busy waits. It might be that many processes are inserting into the
+same block and must wait for each other before they can insert. The solution could be
+to use automatic segment space management or partitioning for the object in question.
+See Also:
+ò
+"Wait Events Statistics" for differences among the views
+V$SESSION_WAIT, V$SESSION_EVENT, and V$SYSTEM_EVENT
+ò
+Oracle Database Reference for information about the dynamic
+performance views
+System Statistics
+System statistics are typically used in conjunction with wait event data to find further
+evidence of the cause of a performance problem.
+For example, if V$SYSTEM_EVENT indicates that the largest wait event (in terms of wait
+time) is the event buffer busy waits, then look at the specific buffer wait statistics
+available in the view V$WAITSTAT to see which block type has the highest wait count
+and the highest wait time.
+After the block type has been identified, also look at V$SESSION real-time while the
+problem is occurring or V$ACTIVE_SESSION_HISTORY and
+DBA_HIST_ACTIVE_SESS_HISTORY views after the problem has been experienced to
+identify the contended-for objects using the object number indicated. The combination
+of this data indicates the appropriate corrective action.
+Statistics are available in many V$ views. The following are some of the V$ views that
+contain system statistics.
+V$ACTIVE_SESSION_HISTORY
+This view displays active database session activity, sampled once every second.
+V$SYSSTAT
+This contains overall statistics for many different parts of Oracle Database, including
+rollback, logical and physical I/O, and parse data. Data from V$SYSSTAT is used to
+compute ratios, such as the buffer cache hit ratio.
+V$FILESTAT
+This contains detailed file I/O statistics for each file, including the number of I/Os for
+each file and the average read time.
+Chapter 10
+Instance Tuning Steps
+10-10
+V$ROLLSTAT
+This contains detailed rollback and undo segment statistics for each segment.
+V$ENQUEUE_STAT
+This contains detail
+
+--- db file scattered read at char 45275 ---
+db file scattered read, but it does not show which file and block number. However,
+V$SESSION_WAIT shows the file number in P1, the block number read in P2, and the number of
+blocks read in P3 (P1 and P2 let you determine for which segments the wait event is
+occurring).
+This section concentrates on examples using V$SESSION_WAIT. However, Oracle
+recommends capturing performance data over an interval and keeping this data for
+performance and capacity analysis. This form of rollup data is queried from the
+V$SYSTEM_EVENT view by AWR.
+Most commonly encountered events are described in this chapter, listed in case-sensitive
+alphabetical order. Other event-related data to examine is also included. The case used for
+each event name is that which appears in the V$SYSTEM_EVENT view.
+Changes to Wait Event Statistics from Past Releases
+Starting with Oracle Database 11g, Oracle Database accumulates wait counts and time outs
+for wait events (such as in the V$SYSTEM_EVENT view) differently than in past releases.
+Continuous waits for certain types of resources (such as enqueues) are internally divided into
+a set of shorter wait calls. In releases prior to Oracle Database 11g, each individual internal
+Chapter 10
+Wait Events Statistics
+10-19
+wait call was counted as a separate wait. Starting with Oracle Database 11g, a single
+resource wait is recorded as a single wait, irrespective of the number of internal time
+outs experienced by the session during the wait.
+This change allows Oracle Database to display a more representative wait count, and
+an accurate total time spent waiting for the resource. Time outs now refer to the
+resource wait, instead of the individual internal wait calls. This change also affects the
+average wait time and the maximum wait time. For example, if a user session must
+wait for an enqueue in order for a transaction row lock to update a single row in a
+table, and it takes 10 seconds to acquire the enqueue, Oracle Database breaks down
+the enqueue wait into 3-second
+
+--- db file sequential read at char 8910 ---
+db file sequential read, db file
+scattered read, db file single write, db file parallel write, and log file
+parallel write. These are all events corresponding to I/Os performed against data
+files and log files. If any of these wait events correspond to high average time, then
+investigate the I/O contention.
+Cross reference the host I/O system data with the I/O sections in the Automatic
+Repository report to identify hot data files and tablespaces. Also compare the I/O times
+reported by the operating system with the times reported by Oracle Database to see if
+they are consistent.
+An I/O problem can also manifest itself with non-I/O related wait events. For example,
+the difficulty in finding a free buffer in the buffer cache or high wait times for logs to be
+flushed to disk can also be symptoms of an I/O problem. Before investigating whether
+the I/O system should be reconfigured, determine if the load on the I/O system can be
+reduced.
+Chapter 10
+Instance Tuning Steps
+10-4
+To reduce I/O load caused by Oracle Database, examine the I/O statistics collected for all I/O
+calls made by the database using the following views:
+ò
+V$IOSTAT_CONSUMER_GROUP
+The V$IOSTAT_CONSUMER_GROUP view captures I/O statistics for consumer groups. If
+Oracle Database Resource Manager is enabled, I/O statistics for all consumer groups
+that are part of the currently enabled resource plan are captured.
+ò
+V$IOSTAT_FILE
+The V$IOSTAT_FILE view captures I/O statistics of database files that are or have been
+accessed. The SMALL_SYNC_READ_LATENCY column displays the latency for single block
+synchronous reads (in milliseconds), which translates directly to the amount of time that
+clients need to wait before moving onto the next operation. This defines the
+responsiveness of the storage subsystem based on the current load. If there is a high
+latency for critical data files, you may want to consider relocating these files to improve
+their service time. To calculate latency statistics, timed_statistics must be 
+
+--- direct path read at char 58006 ---
+direct path read and direct path read temp
+When a session is reading buffers from disk directly into the PGA (opposed to the
+buffer cache in SGA), it waits on this event. If the I/O subsystem does not support
+asynchronous I/Os, then each wait corresponds to a physical read request.
+If the I/O subsystem supports asynchronous I/O, then the process is able to overlap
+issuing read requests with processing the blocks existing in the PGA. When the
+process attempts to access a block in the PGA that has not yet been read from disk, it
+then issues a wait call and updates the statistics for this event. Hence, the number of
+waits is not necessarily the same as the number of read requests (unlike db file
+scattered read and db file sequential read).
+Check the following V$SESSION_WAIT parameter columns:
+ò
+P1: File_id for the read call
+ò
+P2: Start block_id for the read call
+ò
+P3: Number of blocks in the read call
+Causes
+This situation occurs in the following situations:
+ò
+The sorts are too large to fit in memory and some of the sort data is written out
+directly to disk. This data is later read back in, using direct reads.
+ò
+Parallel execution servers are used for scanning data.
+ò
+The server process is processing buffers faster than the I/O system can return the
+buffers. This can indicate an overloaded I/O system.
+Actions
+The file_id shows if the reads are for an object in TEMP tablespace (sorts to disk) or
+full table scans by parallel execution servers. This wait is the largest wait for large data
+warehouse sites. However, if the workload is not a Decision Support Systems (DSS)
+workload, then examine why this situation is happening.
+Sorts to Disk
+Examine the SQL statement currently being run by the session experiencing waits to
+see what is causing the sorts. Query V$TEMPSEG_USAGE to find the SQL statement that
+is generating the sort. Also query the statistics from V$SESSTAT for the session to
+determine the size of the sort. See if it is possible to reduce the sorting by tuning the
+
+--- enqueue at char 23030 ---
+enqueue statistics for each enqueue, including the number of times an
+enqueue was requested and the number of times an enqueue was waited for, and the wait
+time.
+V$LATCH
+This contains detailed latch usage statistics for each latch, including the number of times
+each latch was requested and the number of times the latch was waited for.
+See Also:
+Oracle Database Reference for information about dynamic performance views
+Segment-Level Statistics
+You can gather segment-level statistics to help you spot performance problems associated
+with individual segments. Collecting and viewing segment-level statistics is a good way to
+effectively identify hot tables or indexes in an instance.
+After viewing wait events and system statistics to identify the performance problem, you can
+use segment-level statistics to find specific tables or indexes that are causing the problem.
+Consider, for example, that V$SYSTEM_EVENT indicates that buffer busy waits cause a fair
+amount of wait time. You can select from V$SEGMENT_STATISTICS the top segments that
+cause the buffer busy waits. Then you can focus your effort on eliminating the problem in
+those segments.
+You can query segment-level statistics through the following dynamic performance views:
+ò
+V$SEGSTAT_NAME: This view lists the segment statistics being collected and the
+properties of each statistic (for instance, if it is a sampled statistic).
+ò
+V$SEGSTAT: This is a highly efficient, real-time monitoring view that shows the statistic
+value, statistic name, and other basic information.
+ò
+V$SEGMENT_STATISTICS: This is a user-friendly view of statistic values. In addition to all
+the columns of V$SEGSTAT, it has information about such things as the segment owner
+and table space name. It makes the statistics easy to understand, but it is more costly.
+See Also:
+Oracle Database Reference for information about dynamic performance views
+Chapter 10
+Instance Tuning Steps
+10-11
+Implement and Measure Change
+Often at the end of a tuning exercise, it i
+
+--- free buffer waits at char 36479 ---
+free buffer waits" on My
+Oracle Support website.
+Additional Statistics
+There are several statistics that can indicate performance problems that do not have
+corresponding wait events.
+Redo Log Space Requests Statistic
+The V$SYSSTAT statistic redo log space requests indicates how many times a server
+process had to wait for space in the online redo log, not for space in the redo log
+buffer. Use this statistic and the wait events as an indication that you must tune
+checkpoints, DBWR, or archiver activity, not LGWR. Increasing the size of the log
+buffer does not help.
+Read Consistency
+Your system might spend excessive time rolling back changes to blocks in order to
+maintain a consistent view. Consider the following scenarios:
+ò
+If there are many small transactions and an active long-running query is running in
+the background on the same table where the changes are happening, then the
+query might need to roll back those changes often, in order to obtain a read-
+consistent image of the table. Compare the following V$SYSSTAT statistics to
+determine whether this is happening:
+û
+consistent: changes statistic indicates the number of times a database block
+has rollback entries applied to perform a consistent read on the block.
+Workloads that produce a great deal of consistent changes can consume a
+great deal of resources.
+û
+consistent gets: statistic counts the number of logical reads in consistent
+mode.
+ò
+If there are few very, large rollback segments, then your system could be spending
+a lot of time rolling back the transaction table during delayed block cleanout in
+order to find out exactly which system change number (SCN) a transaction was
+committed. When Oracle Database commits a transaction, all modified blocks are
+not necessarily updated with the commit SCN immediately. In this case, it is done
+later on demand when the block is read or updated. This is called delayed block
+cleanout.
+The ratio of the following V$SYSSTAT statistics should be close to one:
+Chapter 10
+Interp
+
+--- latch events at char 29436 ---
+latch events
+(latch: library cache, latch: library cache pin, latch: library cache lock and latch: shared
+pool) is significant compared to statistic DB time found in V$SYSSTAT. If so, examine the
+SQL ordered by Parse Calls section of the AWR report.
+ò
+A high soft parse rate could be in the rate of 300 a second or more. Unnecessary soft
+parses also limit application scalability. Optimally, a SQL statement should be soft parsed
+once in each session and executed many times.
+Using Wait Event Statistics to Drill Down to Bottlenecks
+Whenever an Oracle process waits for something, it records the wait using one of a set of
+predefined wait events. These wait events are grouped in wait classes. The Idle wait class
+groups all events that a process waits for when it does not have work to do and is waiting for
+more work to perform. Non-idle events indicate nonproductive time spent waiting for a
+resource or action to complete.
+Note:
+Not all symptoms can be evidenced by wait events. See "Additional Statistics" for
+the statistics that can be checked.
+The most effective way to use wait event data is to order the events by the wait time. This is
+only possible if TIMED_STATISTICS is set to true. Otherwise, the wait events can only be
+ranked by the number of times waited, which is often not the ordering that best represents the
+problem.
+To get an indication of where time is spent, follow these steps:
+Chapter 10
+Interpreting Oracle Database Statistics
+10-13
+1.
+Examine the data collection for V$SYSTEM_EVENT. The events of interest should be
+ranked by wait time.
+Identify the wait events that have the most significant percentage of wait time. To
+determine the percentage of wait time, add the total wait time for all wait events,
+excluding idle events, such as Null event , SQL*Net message from client,
+SQL*Net message to client, and SQL*Net more data to client. Calculate the
+relative percentage of the five most prominent events by dividing each event's wait
+time by the total time waited for a
+
+--- log file parallel write at char 31847 ---
+log file parallel write 2,181 28 4.42
+SQL*Net more data from client 516,611 27 4.24
+db file parallel write 13,383 13 2.04
+db file sequential read 563 2 .27
+In some situations, there might be a few events with similar percentages. This can
+provide extra evidence if all the events are related to the same type of resource
+request (for example, all I/O related events).
+2.
+Look at the number of waits for these events, and the average wait time. For
+example, for I/O related events, the average time might help identify whether the
+I/O system is slow. The following example of this data is taken from the Wait Event
+section of the AWR report:
+ Avg
+ Total Wait wait Waits
+Event Waits Timeouts Time (s) (ms) /txn
+--------------------------- --------- --------- ---------- ------ ---------
+log file parallel write 2,181 0 28 13 41.2
+SQL*Net more data from clie 516,611 0 27 0 9,747.4
+db file parallel write 13,383 0 13 1 252.5
+3.
+The top wait events identify the next places to investigate. A table of common wait
+events is listed in Table 10-1. It is usually a good idea to also have quick look at
+high-load SQL.
+4.
+Examine the related data indicated by the wait events to see what other
+information this data provides. Determine whether this information is consistent
+with the wait event data. In most situations, there is enough data to begin
+developing a theory about the potential causes of the performance bottleneck.
+5.
+To determine whether this theory is valid, cross-check data you have examined
+with other statistics available for consistency. The appropriate statistics vary
+depending on the problem, but usually include load profile-related data in
+V$SYSSTAT, operating system statistics, and so on. Perform cross-checks with
+other data to confirm or refute the developing theory.
+Chapter 10
+Interpreting Oracle Database Statistics
+10-14
+See Also:
+ò
+"Idle Wait Events" for the list of idle wait events
+ò
+Oracle Database Reference for more information about wait events
+Table of Wait Events and
+
+--- log buffer space at char 35496 ---
+log buffer space
+Log buffer, I/O
+Log buffer small
+Slow I/O system
+Check the statistic redo buffer
+allocation retries in V$SYSSTAT. Check
+configuring log buffer section in configuring
+memory chapter. Check the disks that house
+the online redo logs for resource contention.
+log file sync
+I/O, over- committing
+Slow disks that store
+the online logs
+Un-batched commits
+Check the disks that house the online redo
+logs for resource contention. Check the
+number of transactions (commits +
+rollbacks) each second, from V$SYSSTAT.
+Chapter 10
+Interpreting Oracle Database Statistics
+10-15
+See Also:
+ò
+"Wait Events Statistics" for detailed information on each event listed in
+"Table 10-1" and for other information to cross-check
+ò
+Oracle Database Reference for information about dynamic performance
+views
+ò
+My Oracle Support notices on buffer busy waits (34405.1) and free
+buffer waits (62172.1). You can also access these notices and related
+notices by searching for "busy buffer waits" and "free buffer waits" on My
+Oracle Support website.
+Additional Statistics
+There are several statistics that can indicate performance problems that do not have
+corresponding wait events.
+Redo Log Space Requests Statistic
+The V$SYSSTAT statistic redo log space requests indicates how many times a server
+process had to wait for space in the online redo log, not for space in the redo log
+buffer. Use this statistic and the wait events as an indication that you must tune
+checkpoints, DBWR, or archiver activity, not LGWR. Increasing the size of the log
+buffer does not help.
+Read Consistency
+Your system might spend excessive time rolling back changes to blocks in order to
+maintain a consistent view. Consider the following scenarios:
+ò
+If there are many small transactions and an active long-running query is running in
+the background on the same table where the changes are happening, then the
+query might need to roll back those changes often, in order to obtain a read-
+consistent image of the table. Compare the foll
+
+--- log file sync at char 35768 ---
+log file sync
+I/O, over- committing
+Slow disks that store
+the online logs
+Un-batched commits
+Check the disks that house the online redo
+logs for resource contention. Check the
+number of transactions (commits +
+rollbacks) each second, from V$SYSSTAT.
+Chapter 10
+Interpreting Oracle Database Statistics
+10-15
+See Also:
+ò
+"Wait Events Statistics" for detailed information on each event listed in
+"Table 10-1" and for other information to cross-check
+ò
+Oracle Database Reference for information about dynamic performance
+views
+ò
+My Oracle Support notices on buffer busy waits (34405.1) and free
+buffer waits (62172.1). You can also access these notices and related
+notices by searching for "busy buffer waits" and "free buffer waits" on My
+Oracle Support website.
+Additional Statistics
+There are several statistics that can indicate performance problems that do not have
+corresponding wait events.
+Redo Log Space Requests Statistic
+The V$SYSSTAT statistic redo log space requests indicates how many times a server
+process had to wait for space in the online redo log, not for space in the redo log
+buffer. Use this statistic and the wait events as an indication that you must tune
+checkpoints, DBWR, or archiver activity, not LGWR. Increasing the size of the log
+buffer does not help.
+Read Consistency
+Your system might spend excessive time rolling back changes to blocks in order to
+maintain a consistent view. Consider the following scenarios:
+ò
+If there are many small transactions and an active long-running query is running in
+the background on the same table where the changes are happening, then the
+query might need to roll back those changes often, in order to obtain a read-
+consistent image of the table. Compare the following V$SYSSTAT statistics to
+determine whether this is happening:
+û
+consistent: changes statistic indicates the number of times a database block
+has rollback entries applied to perform a consistent read on the block.
+Workloads that produce a great deal of consistent chan
+

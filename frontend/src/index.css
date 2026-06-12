@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark-900 text-text-primary;
+    font-family: 'Sora', system-ui, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-500 rounded;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-dark-400;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-dark-700 border border-dark-500 rounded-xl p-5 transition-colors duration-200;
+  }
+  .card:hover {
+    border-color: rgba(34, 211, 238, 0.25);
+  }
+  .card-critical {
+    @apply border-l-4 border-l-accent-red;
+  }
+  .card-warning {
+    @apply border-l-4 border-l-accent-amber;
+  }
+  .card-good {
+    @apply border-l-4 border-l-accent-green;
+  }
+
+  .section-title {
+    @apply text-xs font-bold uppercase tracking-widest text-accent-cyan
+           mb-3 pb-2 border-b border-dark-500;
+  }
+
+  .kpi-card {
+    @apply bg-gradient-to-br from-dark-700 to-dark-600 border border-dark-500
+           rounded-lg p-4 text-center transition-all duration-200;
+  }
+  .kpi-card:hover {
+    @apply border-dark-400 -translate-y-0.5;
+  }
+
+  .btn-primary {
+    @apply px-5 py-2.5 bg-gradient-to-r from-accent-amber to-amber-600
+           text-black font-bold rounded-lg text-sm transition-all duration-200
+           hover:shadow-lg hover:shadow-amber-500/20;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-dark-600 border border-dark-400 text-text-dim
+           rounded-lg text-sm transition-all duration-200
+           hover:border-accent-cyan hover:text-accent-cyan;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold;
+  }
+  .badge-critical {
+    @apply bg-red-500/15 text-accent-red border border-red-500/30;
+  }
+  .badge-warning {
+    @apply bg-amber-500/15 text-accent-amber border border-amber-500/30;
+  }
+  .badge-good {
+    @apply bg-emerald-500/15 text-accent-green border border-emerald-500/30;
+  }
+  .badge-info {
+    @apply bg-cyan-500/15 text-accent-cyan border border-cyan-500/30;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-text-muted
+           transition-all duration-200 hover:bg-dark-600 hover:text-text-primary;
+  }
+  .nav-link.active {
+    @apply bg-dark-600 text-accent-amber border-l-2 border-accent-amber;
+  }
+
+  .table-header {
+    @apply text-xs font-mono uppercase tracking-wider text-accent-cyan bg-dark-700;
+  }
+  .table-row {
+    @apply border-b border-dark-500 hover:bg-dark-600/50 transition-colors;
+  }
+}

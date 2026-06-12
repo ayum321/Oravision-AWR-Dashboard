@@ -1,0 +1,51 @@
+﻿buffer busy start: 48895
+db file scattered start: 45275
+buffer busy waits
+This wait indicates that there are some buffers in the buffer cache that multiple processes are
+attempting to access concurrently. Query V$WAITSTAT for the wait statistics for each class of
+buffer. Common buffer classes that have buffer busy waits include data block, segment
+header, undo header, and undo block.
+Check the following V$SESSION_WAIT parameter columns:
+ò
+P1: File ID
+ò
+P2: Block ID
+ò
+P3: Class ID
+Causes
+To determine the possible causes, first query V$SESSION to identify the value of
+ROW_WAIT_OBJ# when the session waits for buffer busy waits. For example:
+SELECT row_wait_obj# 
+ FROM V$SESSION 
+ WHERE EVENT = 'buffer busy waits';
+To identify the object and object type contended for, query DBA_OBJECTS using the value for
+ROW_WAIT_OBJ# that is returned from V$SESSION. For example:
+SELECT owner, object_name, subobject_name, object_type
+ FROM DBA_OBJECTS
+ WHERE data_object_id = &row_wait_obj;
+Actions
+The action required depends on the class of block contended for and the actual segment.
+Chapter 10
+Wait Events Statistics
+10-21
+Segment Header
+If the contention is on the segment header, then this is most likely free list contention.
+Automatic segment-space management in locally managed tablespaces eliminates the
+need to specify the PCTUSED, FREELISTS, and FREELIST GROUPS parameters. If possible,
+switch from manual space management to automatic segment-space management
+(ASSM).
+The following information is relevant if you are unable to use ASSM (for example,
+because the tablespace uses dictionary space management).
+A free list is a list of free data blocks that usually includes blocks existing in several
+different extents within the segment. Free lists are composed of blocks in which free
+space has not yet reached PCTFREE or used space has shrunk below PCTUSED.
+Specify the number of process free lists with the FREELISTS parameter. The default
+value of FREELISTS is one. The maximum value depends on the data block size.
+To find the current setting for free lists for that segment, run the following:
+SELECT SEGMENT_NAME, FREELISTS
+ FROM DBA_SEGMENTS
+ WHERE SEGMENT_NAME = segment name
+ AND SEGMENT_TYPE = segment type;
+Set free lists, or increase the number of free lists. If adding more free lists does not
+alleviate the problem, then use free list groups (even in single instance this can make
+a difference). If using Oracle RAC

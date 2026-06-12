@@ -1,0 +1,81 @@
+"""Check if COMMIT_LOGGING verdict is correct for MFR data."""
+import json
+
+data = json.load(open('_audit_mfr_compare.json'))
+good = data['good_data']
+bad = data['bad_data']
+
+# Log file sync in both periods
+for label, d in [('GOOD', good), ('BAD', bad)]:
+    for w in d.get('wait_events', []):
+        if 'log file sync' in w.get('event_name', ''):
+            pct = w.get('pct_db_time', 0)
+            avg = w.get('avg_wait_ms', 0)
+            total = w.get('total_wait_time_secs', 0)
+            waits = w.get('total_waits', 0)
+            print(f"{label} log file sync: %DB={pct:.1f}%, waits={waits}, avg={avg:.2f}ms, total={total:.1f}s")
+
+print()
+print("=" * 60)
+print("VERDICT ACCURACY: COMMIT_LOGGING")
+print("=" * 60)
+print()
+print("The scoring engine picks COMMIT_LOGGING because:")
+print("  - logFileSyncPct = 29.4% >= 3% threshold")
+print("  - score = 30 + 29.4*2 = ~89 (highest)")
+print()
+print("BUT this is MISLEADING because:")
+print("  - Good period: 27.1% DB Time, avg 1.68ms")
+print("  - Bad period:  29.4% DB Time, avg 1.48ms")
+print("  - Delta: +2.3pp (within normal variance)")
+print("  - Avg wait IMPROVED: 1.68ms → 1.48ms")
+print("  - This is a STRUCTURAL characteristic, not a regression")
+print()
+print("The correct interpretation should be:")
+print("  - No significant regression (DB Time -39%)")
+print("  - INCONCLUSIVE or WORKLOAD_DECREASE")
+print("  - Both periods have same bottleneck profile")
+print("  - The issue is at application/job level, not database")
+print()
+print("MISSING GUARD RAIL:")
+print("  Need: If logFileSyncPct in Good is similar to Bad,")
+print("  and DB Time DECREASED, COMMIT_LOGGING should be disqualified")
+print("  (it's structural, not a regression)")
+print()
+
+# Check what the narrative Part 1 would actually say
+print("=" * 60)
+print("WHAT NARRATIVE WOULD SAY:")
+print("=" * 60)
+print()
+print("Part 1 (COMMIT_LOGGING path):")
+print("  'The Bad period was dominated by commit-frequency pressure —")
+print("  log file sync reached 29.4% DB Time...'")
+print()
+print("This is TECHNICALLY TRUE but CONTEXTUALLY WRONG:")
+print("  - The Good period ALSO had 27.1% log file sync")
+print("  - It was NOT new to the Bad period")
+print("  - It did not 'reach' 29.4% — it was already at 27.1%")
+print("  - The avg wait IMPROVED, not worsened")
+print()
+print("Part 2 (COMMIT_LOGGING path):")
+print("  'Every COMMIT triggers synchronous redo flushing...'")
+print("  This Oracle mechanism explanation is always correct, but")
+print("  it implies this is the root cause of a problem — there's no problem here")
+print()
+
+# What SHOULD happen:
+print("=" * 60)
+print("RECOMMENDED FIXES:")
+print("=" * 60)
+print()
+print("1. Add DB Time decrease guard: If dtChange < -10%,")
+print("   suppress regression-oriented verdicts")
+print()
+print("2. Add structural similarity guard: If a wait event %")
+print("   is within ±5pp between Good and Bad, it's structural,")
+print("   not a regression")
+print()
+print("3. Add INCONCLUSIVE enhancement: When DB Time decreased")
+print("   and no clear regression exists, the verdict should be")
+print("   'NO_REGRESSION' or 'WORKLOAD_DECREASE' with appropriate narrative")

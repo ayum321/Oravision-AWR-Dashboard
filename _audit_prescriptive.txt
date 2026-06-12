@@ -1,0 +1,91 @@
+=== ACTION_READINESS_SECTION ===
+  L18624: if (!n.length) n.push({ s:'Conditional', m:'No immediate action is safe from a single AWR snapshot. Capture a baseline comparison AWR to ena
+  L18630: <span style="font-size:11px">ΓÜí</span> Action Readiness ΓÇö Evidence Gates
+  L23511: // ΓöÇΓöÇ Spec improvements: hypothesis badge + falsifiers + evidence gates ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  L25068: // Action readiness badges ΓÇö evidence-gated (spec rules AΓÇôE)
+  L25078: notes.push({ s:'Do not do yet', m:'Stats gather: ΓëÑ2 evidence gates required (stale stats evidence, buffer hit degradation, or confirmed plan
+
+=== DB_WRITER_PROCESSES ===
+  L2750: tldr: 'Increase DB_WRITER_PROCESSES to CPU_COUNT\u00f74 (min 4) and verify DISK_ASYNCH_IO=TRUE',
+  L2758: + 'Increasing db_writer_processes adds I/O parallelism at the DBWR level.',
+  L3996: fixExpect: 'secs_delta highest on db file parallel write = I/O-bound DBWR (storage fix needed). secs_delta highest on free buffer waits = DB
+  L3997: fixAction: 'Fix order: (1) Check I/O speed for DBWR writes. (2) Use V$DB_CACHE_ADVICE to size buffer cache. (3) Increase DB_WRITER_PROCESSES
+  L4038: oracleNote: 'High LRU latch is almost always a symptom of either (1) too many concurrent large scans sweeping the LRU list, or (2) DBWR writ
+
+=== DISK_ASYNCH_IO ===
+  L2750: tldr: 'Increase DB_WRITER_PROCESSES to CPU_COUNT\u00f74 (min 4) and verify DISK_ASYNCH_IO=TRUE',
+  L2756: + 'DBWR uses asynchronous I/O (DISK_ASYNCH_IO=TRUE) to batch writes; if async I/O '
+  L4041: fixAction: 'If paired with free buffer waits: increase DB_WRITER_PROCESSES and check DISK_ASYNCH_IO=TRUE. If standalone: reduce concurrent l
+  L4084: fixAction: 'Fix in order: (1) Increase DB_WRITER_PROCESSES (1 per 8 CPUs). (2) Verify DISK_ASYNCH_IO=TRUE. (3) Use V$DB_CACHE_ADVICE to dete
+  L5179: statisticsNote: 'Critical async I/O check: SELECT VALUE FROM V$PARAMETER WHERE NAME=\'filesystemio_options\'. If not SETALL, Oracle on Linux
+
+=== TUNE_DBWR ===
+  L31787: 'free buffer waits':             { cls:'Configuration',  tip:'Database writer (DBWR) cannot flush dirty buffers fast enough ΓÇö buffer cache i
+  L31788: 'write complete waits':          { cls:'Configuration',  tip:'Buffer being written by DBWR ΓÇö session needs a block that DBWR is currently wr
+
+=== INC_DBWRITER ===
+  L2750: tldr: 'Increase DB_WRITER_PROCESSES to CPU_COUNT\u00f74 (min 4) and verify DISK_ASYNCH_IO=TRUE',
+  L3997: fixAction: 'Fix order: (1) Check I/O speed for DBWR writes. (2) Use V$DB_CACHE_ADVICE to size buffer cache. (3) Increase DB_WRITER_PROCESSES
+  L4041: fixAction: 'If paired with free buffer waits: increase DB_WRITER_PROCESSES and check DISK_ASYNCH_IO=TRUE. If standalone: reduce concurrent l
+  L4084: fixAction: 'Fix in order: (1) Increase DB_WRITER_PROCESSES (1 per 8 CPUs). (2) Verify DISK_ASYNCH_IO=TRUE. (3) Use V$DB_CACHE_ADVICE to dete
+  L4186: fixAction: 'Increase DB_WRITER_PROCESSES (default=1, set to 2-4). Move hot datafiles to faster storage. Reduce dirty buffer generation by op
+
+=== INC_DBCACHE ===
+  L3993: bufferHitPct: { warn: 95, critical: 90, action: 'Check V$DB_CACHE_ADVICE ΓÇö if estd_physical_read_factor < 0.8 at 2x size, increase DB_CACHE_
+  L4084: fixAction: 'Fix in order: (1) Increase DB_WRITER_PROCESSES (1 per 8 CPUs). (2) Verify DISK_ASYNCH_IO=TRUE. (3) Use V$DB_CACHE_ADVICE to dete
+  L4423: fixAction: 'Increase DB_CACHE_SIZE, add DBWR processes (DB_WRITER_PROCESSES), or migrate to faster storage. Also check LOG_CHECKPOINT_INTERV
+  L4944: fix: 'Keep hot blocks in cache: increase db_cache_size or use KEEP pool' });
+  L5040: fix: 'Increase db_cache_size to ' + r.cache_mb + ' MB' });
+
+=== INC_REDOLOG ===
+  L2763: + 'wait times to increase even if redo log storage is adequate.',
+  L3842: fixAction: 'Increase LOG_BUFFER (default is auto-tuned; try 32ΓÇô64MB for heavy DML). Move redo logs to fastest storage. Reduce commit frequen
+  L3860: fixAction: 'IF avg wait >20ms: move redo logs to fastest available storage. IF avg wait <10ms: batch commits in application (50-100 rows per
+  L4019: fixAction: 'For commit-in-loop: (1) Move COMMIT outside the loop (commit once after full batch). (2) Or batch commits every N rows (e.g. eve
+  L4030: fixAction: 'Fix order: (1) Increase redo log size to ΓëÑ500 MB: ALTER DATABASE ADD LOGFILE. (2) Add more redo log groups (minimum 5 groups). (
+
+=== INC_LOGBUF ===
+  L3842: fixAction: 'Increase LOG_BUFFER (default is auto-tuned; try 32ΓÇô64MB for heavy DML). Move redo logs to fastest storage. Reduce commit frequen
+  L3900: fixAction: 'Increase LOG_BUFFER. Reduce commit frequency.',
+  L4327: fixAction: 'Increase LOG_BUFFER. Reduce commit frequency. Consider batching DML. On 19c, private redo strands (default ON) should mitigate ΓÇö
+  L4450: fixAction: 'Reduce redo generation (batch DML, nologging where safe). Increase LOG_BUFFER if < 64MB. Oracle 12c+ auto-tunes redo copy latche
+  L4459: fixAction: 'Enable private redo strands (12c+: _log_private_mul). Increase LOG_BUFFER. Reduce redo generation rate.',
+
+=== INC_SHAREDPOOL ===
+  L3891: fixAction: 'Use bind variables. Increase shared_pool_size. Set cursor_sharing=FORCE if needed.',
+  L4098: fixAction: 'Primary: enforce bind variables in application code. Emergency: SET cursor_sharing = FORCE. Increase SHARED_POOL_SIZE if library
+  L4291: fixAction: 'Increase SHARED_POOL_SIZE. Reduce hard parse rate (bind variables). Avoid DDL during peak hours. For dc_sequences: increase sequ
+  L4345: fixAction: 'Reduce hard parsing: bind variables, cursor_sharing=FORCE. Increase SHARED_POOL_SIZE if dictionary cache misses are high. Avoid 
+  L4362: fixAction: 'Enforce bind variables at application level. Set cursor_sharing=FORCE as a stopgap. Increase SHARED_POOL_SIZE. Consider pinning 
+
+=== INC_PGA ===
+  L2562: tldr: 'PGA work area spilling to temp \u2014 increase PGA_AGGREGATE_TARGET or add a sort-eliminating index',
+  L3731: fixAction: 'Increase PGA_AGGREGATE_TARGET. Identify SQL with large sorts: V$SQL_WORKAREA_ACTIVE.',
+  L3740: fixAction: 'Increase PGA or rewrite SQL to reduce sort scope.',
+  L4413: fixAction: 'Increase PGA_AGGREGATE_TARGET. If specific SQL causes huge sorts, tune the SQL to reduce sort volume.',
+  L4623: fix: 'Increase pga_aggregate_target to ' + r.pga_target_mb + ' MB where cache_hit >= 90%' });
+
+=== INC_UNDO ===
+  L2282: text: 'Transactions/sec spiked +' + delta.toFixed(0) + '% to ' + val.toFixed(1) + '/s. This volume increase drives proportionally more redo 
+  L2307: risk: 'ORA-01555 (snapshot too old) risk increases. Undo tablespace pressure. Blocking risk for concurrent DML.',
+  L3759: oracleNote: 'Query V$WAITSTAT to identify block class. Segment header ΓåÆ use ASSM. Data block ΓåÆ hash partition or INITRANS. Undo block ΓåÆ incr
+  L4169: fixAction: 'Increase UNDO_RETENTION, add datafiles to undo tablespace, or increase number of undo segments (Oracle auto-tunes in AUM mode ΓÇö 
+  L4441: fixAction: 'Increase UNDO_TABLESPACE size, set UNDO_RETENTION appropriately. If AUM, Oracle auto-tunes ΓÇö check if tablespace is full.',
+
+=== TLDR_INCREASE ===
+  L2562: tldr: 'PGA work area spilling to temp \u2014 increase PGA_AGGREGATE_TARGET or add a sort-eliminating index',
+  L2750: tldr: 'Increase DB_WRITER_PROCESSES to CPU_COUNT\u00f74 (min 4) and verify DISK_ASYNCH_IO=TRUE',
+  L14174: tldr = `<b>DBWR / buffer-cache write backlog is the bottleneck</b> ΓÇö concurrent DML is producing dirty buffers faster than DBWR can drain th
+  L14176: tldr = `<b>DBWR / buffer-cache write throughput is exhausted</b> ΓÇö <b>free buffer waits ${f1(_freeBufPct)}% DB Time</b>${_bufBusyPct?` (with
+
+=== FIXACTION_INCREASE ===
+  L3731: fixAction: 'Increase PGA_AGGREGATE_TARGET. Identify SQL with large sorts: V$SQL_WORKAREA_ACTIVE.',
+  L3740: fixAction: 'Increase PGA or rewrite SQL to reduce sort scope.',
+  L3750: fixAction: 'Increase buffer cache or partition hot segment.',
+  L3842: fixAction: 'Increase LOG_BUFFER (default is auto-tuned; try 32ΓÇô64MB for heavy DML). Move redo logs to fastest storage. Reduce commit frequen
+  L3860: fixAction: 'IF avg wait >20ms: move redo logs to fastest available storage. IF avg wait <10ms: batch commits in application (50-100 rows per
+
+=== FIXACTION_ADDDBWR ===
+  L4030: fixAction: 'Fix order: (1) Increase redo log size to ΓëÑ500 MB: ALTER DATABASE ADD LOGFILE. (2) Add more redo log groups (minimum 5 groups). (
+  L4423: fixAction: 'Increase DB_CACHE_SIZE, add DBWR processes (DB_WRITER_PROCESSES), or migrate to faster storage. Also check LOG_CHECKPOINT_INTERV
+

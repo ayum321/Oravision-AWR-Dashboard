@@ -1,0 +1,5369 @@
+{
+  "total_tests": 119,
+  "passed": 119,
+  "failed": 0,
+  "warnings": 1072,
+  "accuracy_pct": 100.0,
+  "findings": [
+    {
+      "type": "WARNING",
+      "test": "Template file is 2.0MB (28948 lines)",
+      "detail": "Monolithic file — consider splitting into modules"
+    },
+    {
+      "type": "WARNING",
+      "test": "Could not verify served content: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parses defined at L2073 and L2079",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L2713 and L2805",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp2 defined at L2712 and L2806",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L2869 and L2881",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L2260 and L2892",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bufHit defined at L2062 and L3002",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: libHit defined at L2063 and L3003",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuCount defined at L2802 and L3040",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasBad defined at L2850 and L3041",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L2892 and L3050",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cls defined at L3215 and L3225",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cls defined at L3225 and L3375",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bcd defined at L4348 and L4352",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bcd defined at L4352 and L4357",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp defined at L4369 and L4378",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp defined at L4378 and L4383",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sp defined at L4373 and L4384",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: redo defined at L4395 and L4399",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: redo defined at L4399 and L4404",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eR defined at L4438 and L4461",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eR defined at L4461 and L4480",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: drR defined at L4440 and L4500",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eR defined at L4480 and L4501",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eR defined at L4501 and L4521",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpGood defined at L2997 and L4566",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effGood defined at L3009 and L4581",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L4568 and L4583",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execDelta defined at L4628 and L4646",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: entry defined at L3165 and L4686",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L3393 and L4702",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: goodWaits defined at L4543 and L4738",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gPct defined at L4549 and L4760",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bPct defined at L4550 and L4761",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L3236 and L4762",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: entry defined at L4686 and L4790",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: entry defined at L4790 and L4876",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badWaits defined at L4737 and L4910",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: goodWaits defined at L4738 and L4911",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effGood defined at L4581 and L4912",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effBad defined at L3004 and L4913",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpGood defined at L4566 and L4915",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpBad defined at L2993 and L4916",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bw defined at L4922 and L4927",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L5057 and L5348",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: primary defined at L4675 and L5640",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L4597 and L5643",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasG defined at L4596 and L5644",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badWaits defined at L4910 and L5646",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: goodWaits defined at L4911 and L5647",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpGood defined at L4915 and L5648",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpBad defined at L4916 and L5649",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hardParseDelta defined at L5036 and L5669",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isParallel defined at L2383 and L5716",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gPct defined at L4760 and L5986",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gPct defined at L5986 and L5990",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: en defined at L5984 and L6018",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: en defined at L6018 and L6030",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: en defined at L6030 and L6038",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: en defined at L6038 and L6046",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _elGoodNR defined at L5994 and L6169",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _elBadNR defined at L5995 and L6170",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: allDeltas defined at L4908 and L6245",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: primary defined at L5640 and L6248",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: catalog defined at L4680 and L6249",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L5643 and L6250",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasG defined at L5644 and L6251",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasB defined at L5645 and L6252",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: entry defined at L4876 and L6270",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bad defined at L4791 and L6274",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: good defined at L4793 and L6275",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execsBad defined at L5657 and L6279",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topCulprit defined at L3332 and L6320",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: physReadsGood defined at L5658 and L6341",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: physReadsBad defined at L5659 and L6342",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effGood defined at L4912 and L6344",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effBad defined at L4913 and L6345",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confidence defined at L6199 and L6400",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: waitName defined at L6416 and L6424",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: avgWaitMs defined at L2704 and L6455",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: softParseBad defined at L4374 and L6568",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: usedSections defined at L4700 and L6660",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L4702 and L6670",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sec defined at L6662 and L6675",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L4762 and L6718",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlTables defined at L6729 and L6755",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wc defined at L4938 and L6786",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: registry defined at L4735 and L6878",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L4583 and L6886",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bPct defined at L4761 and L7074",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: categories defined at L7032 and L7085",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bad defined at L6274 and L7113",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: good defined at L6275 and L7114",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pctDb defined at L6281 and L7117",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sb defined at L7171 and L7192",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sb defined at L7192 and L7199",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mc defined at L7172 and L7200",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: icon defined at L7173 and L7201",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sb defined at L7199 and L7212",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mc defined at L7200 and L7213",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: icon defined at L7201 and L7214",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rb defined at L2140 and L7267",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L7261 and L7293",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rb defined at L7267 and L7299",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dlBtn defined at L7271 and L7303",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L7293 and L7311",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L6886 and L7335",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: banner defined at L7321 and L7433",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: icon defined at L7214 and L7502",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: icon defined at L7502 and L7534",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: text defined at L7503 and L7535",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: form defined at L7566 and L7614",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L7311 and L7620",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: data defined at L7576 and L7647",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L7620 and L7714",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L3050 and L7722",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rca1 defined at L2843 and L7728",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L7767 and L7780",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L7722 and L7802",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rca defined at L2984 and L7812",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: f1 defined at L7603 and L7894",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L3024 and L7898",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L7714 and L8025",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L8025 and L8034",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: verdict defined at L3249 and L8039",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: conf defined at L4947 and L8042",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txt defined at L5535 and L8058",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corr defined at L4854 and L8068",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: items defined at L8057 and L8070",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bad defined at L7113 and L8132",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: SNAP_TOL defined at L8169 and L8287",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: snapBegin defined at L8174 and L8294",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: snapEnd defined at L8175 and L8295",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: snapIntervals defined at L8176 and L8296",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: durationMin defined at L8177 and L8297",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dtBegin defined at L8178 and L8298",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: beginMin defined at L8179 and L8300",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: endMin defined at L8180 and L8301",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: crossesMidnight defined at L8182 and L8304",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: banners defined at L8206 and L8385",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: goodHHMM defined at L8420 and L8443",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badHHMM defined at L8421 and L8444",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bannersHtml defined at L8232 and L8524",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: st defined at L2413 and L8643",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: metrics defined at L8622 and L8695",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L6718 and L8704",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L8704 and L8727",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: worse defined at L8705 and L8728",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: better defined at L8706 and L8729",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: severity defined at L8710 and L8730",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: fmtV defined at L8732 and L8744",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ds defined at L8777 and L8852",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _upGood defined at L8778 and L8853",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dirArrow defined at L8779 and L8854",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L7780 and L8983",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pairs defined at L8986 and L9017",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L8983 and L9018",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sa defined at L8755 and L9025",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pairs defined at L9017 and L9041",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: btn defined at L98 and L9047",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rca defined at L7812 and L9058",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L7802 and L9060",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bufHit defined at L3002 and L9065",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: libHit defined at L3003 and L9066",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: softParse defined at L2064 and L9067",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: latchHit defined at L2066 and L9068",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execParse defined at L2065 and L9069",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hardParses defined at L2074 and L9070",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: events defined at L3398 and L9073",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp defined at L4914 and L9075",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L6250 and L9078",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbTimeSecs defined at L3039 and L9079",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp defined at L4383 and L9086",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wc defined at L6786 and L9103",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevBadge defined at L7900 and L9108",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: html defined at L2765 and L9131",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rows defined at L8985 and L9226",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _redo defined at L9246 and L9342",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L4940 and L9358",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execPerLogon defined at L2257 and L9366",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L8774 and L9492",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rows defined at L9226 and L9516",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: snapBegin defined at L8294 and L9552",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: snapEnd defined at L8295 and L9553",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: durationMin defined at L8297 and L9555",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: STANDARD_INTERVALS defined at L8286 and L9557",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: SNAP_TOL defined at L8287 and L9558",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: beginMin defined at L8300 and L9562",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: endMin defined at L8301 and L9563",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: startOn defined at L8322 and L9564",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: endOn defined at L8323 and L9565",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: stdInt defined at L8324 and L9566",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: banners defined at L8385 and L9575",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isWarn defined at L8785 and L9615",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colors defined at L7411 and L9645",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: h defined at L2985 and L9655",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L9060 and L9677",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: html defined at L9131 and L9699",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevColor defined at L8761 and L9704",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: score defined at L5963 and L9705",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: grade defined at L7962 and L9706",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topSql defined at L9112 and L9725",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L9358 and L9731",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitName defined at L4771 and L9732",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sp defined at L4384 and L9794",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L2239 and L10068",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: critCount defined at L9113 and L10069",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevCol defined at L9210 and L10075",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevBg defined at L8762 and L10076",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlBadges defined at L10027 and L10084",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L2805 and L10174",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp2 defined at L2806 and L10175",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev2 defined at L2705 and L10177",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L9078 and L10199",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasG defined at L6251 and L10200",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasB defined at L6252 and L10201",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct defined at L6637 and L10208",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbTimeDelta defined at L4629 and L10247",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txnDelta defined at L2254 and L10253",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reclaim defined at L10405 and L10421",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: top defined at L10186 and L10494",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confidence defined at L6400 and L10512",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L7898 and L10700",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasNow defined at L10698 and L10727",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: maxScale defined at L10699 and L10731",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L10700 and L10732",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: d1 defined at L2787 and L10822",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L7729 and L10825",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L10176 and L10826",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L10174 and L10827",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1 defined at L6879 and L10828",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: addm defined at L3047 and L10829",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effGood defined at L6344 and L10830",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effBad defined at L6345 and L10831",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L10068 and L10834",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corrNotes defined at L10071 and L10835",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hsCfg defined at L10062 and L10838",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hs defined at L10067 and L10843",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pD defined at L2809 and L10846",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L9492 and L10858",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L9043 and L10862",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: prev defined at L10901 and L10961",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L2881 and L10962",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe1 defined at L2870 and L10963",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isNew defined at L6276 and L10964",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isPlanChg defined at L5699 and L10965",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: critCount defined at L10069 and L10973",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: warnCount defined at L10070 and L10974",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corr defined at L8068 and L11050",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L10732 and L11078",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: avgMs defined at L3402 and L11079",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L11078 and L11129",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pCol defined at L11080 and L11132",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: en defined at L6046 and L11284",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: en defined at L11284 and L11298",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: related defined at L11282 and L11299",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbCpuPct defined at L5662 and L11324",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioPct defined at L10207 and L11325",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: commitPct defined at L10209 and L11327",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pctDb defined at L7117 and L11400",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L11136 and L11402",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gets defined at L9730 and L11407",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct defined at L10208 and L11408",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L11129 and L11508",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corrLink defined at L11088 and L11514",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dCol defined at L11049 and L11558",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _txIdxPct defined at L5504 and L11584",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _txRowPct defined at L5503 and L11585",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _domSqlText defined at L10195 and L11587",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _domSqlVerb defined at L10196 and L11588",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _domIsDML defined at L10197 and L11589",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pdb defined at L9727 and L11645",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gets defined at L11407 and L11646",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L11402 and L11648",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badgeCol defined at L11403 and L11649",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pdb defined at L11645 and L11810",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dom defined at L10189 and L11812",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L10858 and L11813",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: actions defined at L9797 and L11943",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: f0 defined at L9697 and L11946",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L7057 and L11948",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L10862 and L11949",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevCol defined at L10075 and L11950",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasG defined at L10200 and L11955",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L10199 and L11956",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topW2 defined at L10202 and L11964",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L9729 and L12055",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: top defined at L10494 and L12105",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _domTbl defined at L11993 and L12188",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioEv defined at L12014 and L12313",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L12055 and L12415",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlWaitMap defined at L11277 and L12559",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: waitSqlMap defined at L11295 and L12560",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pane defined at L12566 and L12570",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe1 defined at L10963 and L12594",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L10962 and L12595",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L11508 and L12596",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: st defined at L8643 and L12597",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sid defined at L6490 and L12620",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pane defined at L12570 and L12663",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L8034 and L12675",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L12675 and L12702",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L11648 and L12736",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev2 defined at L10177 and L12754",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql2 defined at L6880 and L12755",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp2 defined at L10175 and L12756",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s2 defined at L2791 and L12757",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L11956 and L12758",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbCpuPct defined at L11324 and L12763",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioPct defined at L11325 and L12764",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: concPct defined at L11326 and L12765",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: commitPct defined at L11327 and L12766",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L10834 and L12770",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topSql defined at L9725 and L12774",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L12595 and L12776",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gets defined at L11646 and L12777",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pdb defined at L11810 and L12778",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L11949 and L12847",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: diag defined at L11509 and L12849",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: val defined at L8641 and L12887",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corrNotes defined at L10835 and L12913",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L9731 and L12926",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev2 defined at L12754 and L12949",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L10826 and L12950",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql2 defined at L12755 and L12951",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1 defined at L10828 and L12952",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L10827 and L12953",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp2 defined at L12756 and L12954",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1 defined at L2790 and L12955",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s2 defined at L12757 and L12956",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L12758 and L12957",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L10825 and L12958",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas2 defined at L12759 and L12959",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbCpuPct defined at L12763 and L12963",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioPct defined at L12764 and L12964",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: concPct defined at L12765 and L12965",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: commitPct defined at L12766 and L12966",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: primaryBottleneck defined at L12767 and L12967",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: overallHealth defined at L12768 and L12968",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1Map defined at L10875 and L12970",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L12770 and L12971",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlSorted defined at L12773 and L12974",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topSql defined at L12774 and L12975",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isNew defined at L10964 and L12977",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1x defined at L2868 and L12978",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L12776 and L12979",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe1 defined at L12594 and L12980",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gets defined at L12777 and L12981",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pdb defined at L12778 and L12982",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: label defined at L7964 and L12984",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: action1fix defined at L12779 and L12986",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: action2fix defined at L12780 and L12987",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: evidence defined at L12783 and L12992",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: minorSqls defined at L12811 and L13025",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1Map defined at L10876 and L13051",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: waitDiagMap defined at L12830 and L13052",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: prev defined at L10961 and L13072",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isNew defined at L12977 and L13073",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L8727 and L13074",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L12596 and L13076",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L12847 and L13077",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: diagKey defined at L12848 and L13078",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: diag defined at L12849 and L13079",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: label defined at L12984 and L13080",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpShifts defined at L11972 and L13116",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: worst defined at L12892 and L13131",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ranked defined at L12924 and L13157",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L12926 and L13160",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dtGood defined at L6253 and L13161",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dtBad defined at L6254 and L13162",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: verdictText defined at L12927 and L13164",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corrNotes defined at L12913 and L13169",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: d1 defined at L10822 and L13203",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: h1 defined at L2792 and L13204",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L12958 and L13205",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L12950 and L13207",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1 defined at L12952 and L13208",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas1 defined at L8696 and L13210",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: v1 defined at L8703 and L13211",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: exec1 defined at L2248 and L13214",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execSpike defined at L2854 and L13217",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: logon1 defined at L2246 and L13218",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: logonSpike defined at L2856 and L13219",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lps defined at L9595 and L13229",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aiText defined at L9082 and L13232",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp1 defined at L2251 and L13329",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hpDelta defined at L2256 and L13330",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: showParse defined at L9087 and L13333",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: flags defined at L9089 and L13335",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _blAas defined at L13249 and L13443",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _blCpuBusy defined at L13250 and L13444",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _blLatchHit defined at L13251 and L13445",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _blStressed defined at L13252 and L13446",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _pctUtil defined at L13254 and L13448",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _addmGood defined at L13255 and L13449",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _preExisting defined at L13256 and L13450",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: fmtK defined at L9341 and L13631",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbTimeSecs1 defined at L2800 and L13640",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbTimeSecs2 defined at L2801 and L13641",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: commitCol defined at L9337 and L13667",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuEffCol defined at L9339 and L13677",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pD defined at L10846 and L13712",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: physDelta defined at L6343 and L13724",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: redoDelta defined at L10256 and L13728",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txn1 defined at L2240 and L13737",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txn2 defined at L2241 and L13738",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txnDelta defined at L10253 and L13739",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpRows defined at L9609 and L13743",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlAttrib defined at L2866 and L13797",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1x defined at L12978 and L13801",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2x defined at L13803 and L13823",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitName defined at L9732 and L13849",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitDelta defined at L6340 and L13855",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: drivers defined at L9353 and L13987",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dPct defined at L11131 and L14045",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L13077 and L14046",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: arrow defined at L8136 and L14049",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rows defined at L9516 and L14062",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: patterns defined at L4907 and L14253",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dlBtn defined at L7303 and L14263",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L13205 and L14295",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L12957 and L14296",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L14046 and L14309",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confBadge defined at L11173 and L14310",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L5348 and L14341",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: score defined at L9705 and L14372",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execsBad defined at L6279 and L14376",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execsGood defined at L5656 and L14377",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pctDb defined at L11400 and L14381",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct defined at L11408 and L14382",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isNew defined at L13073 and L14384",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rank defined at L14501 and L14592",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L12736 and L14594",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epeRatio defined at L14375 and L14599",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wc defined at L9103 and L14600",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: flags defined at L13335 and L14728",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: metrics defined at L8695 and L14863",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gVal defined at L6716 and L14867",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bVal defined at L6717 and L14868",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: arrow defined at L14049 and L14869",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isCrit defined at L8784 and L14951",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bg defined at L8775 and L14953",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confColor defined at L11378 and L14983",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colors defined at L9645 and L15041",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L6670 and L15083",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: map1 defined at L6881 and L15134",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wCtx defined at L15037 and L15140",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L15083 and L15157",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bp defined at L9793 and L15333",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L11948 and L15334",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cc defined at L14986 and L15335",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1ids defined at L2864 and L15491",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txt defined at L8058 and L15500",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L14341 and L15504",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reg defined at L15498 and L15511",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L15504 and L15512",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlText defined at L6285 and L15513",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L12979 and L15583",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe1 defined at L12980 and L15584",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execsDelta defined at L5670 and L15585",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: planChg defined at L13809 and L15586",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ds defined at L8852 and L15672",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: label defined at L13080 and L15680",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sc defined at L11163 and L15783",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pctDb defined at L14381 and L15784",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execsBad defined at L14376 and L15785",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isNew defined at L14384 and L15787",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _allCandidates defined at L14513 and L15832",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: candidates defined at L4909 and L15856",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L11813 and L15896",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wc defined at L14600 and L15900",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: corrBadge defined at L11052 and L15901",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L14594 and L15913",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: metrics defined at L14863 and L15975",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L9677 and L16071",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: report defined at L12700 and L16073",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L16071 and L16095",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp defined at L9075 and L16096",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sreConn defined at L13228 and L16101",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rca defined at L9058 and L16131",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: db defined at L2986 and L16133",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: h defined at L9655 and L16135",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: events defined at L9073 and L16137",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqls defined at L9074 and L16138",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eff defined at L9063 and L16139",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: addm defined at L10829 and L16140",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas defined at L9077 and L16141",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L14296 and L16142",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: score defined at L14372 and L16143",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: n0 defined at L4931 and L16148",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _hwEnqPct defined at L11583 and L16152",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _txIdxPct defined at L11584 and L16153",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _txRowPct defined at L11585 and L16154",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _usEnqPct defined at L11586 and L16155",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _freeBufPct defined at L11579 and L16156",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _bufBusyPct defined at L11580 and L16157",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _fbEnqPct defined at L11581 and L16158",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _latchPct defined at L11574 and L16159",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbCpuPct defined at L12963 and L16160",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioPct defined at L12964 and L16161",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: commitPct defined at L12966 and L16162",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: catLabel defined at L11254 and L16204",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pTier defined at L10501 and L16209",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasRatio defined at L9109 and L16211",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sessionRisk defined at L10528 and L16218",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confScore defined at L11368 and L16225",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confColor defined at L14983 and L16226",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confLabel defined at L10513 and L16227",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tile defined at L10671 and L16230",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L12415 and L16265",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gets defined at L12981 and L16266",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badgeCol defined at L11649 and L16267",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitName defined at L13849 and L16292",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L16265 and L16298",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: top3 defined at L15418 and L16575",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L13076 and L16577",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuBound defined at L10527 and L16603",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L16095 and L16686",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: meta defined at L15196 and L16690",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp defined at L16096 and L16703",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpBad defined at L5649 and L16704",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lpGood defined at L5648 and L16705",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tm defined at L16098 and L16708",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tmBad defined at L3034 and L16709",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tmGood defined at L3035 and L16710",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: verdict defined at L8039 and L16713",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L12971 and L16715",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: addm defined at L16140 and L16717",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: btn defined at L9047 and L16726",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cls defined at L3375 and L16732",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: connWaitPct defined at L2859 and L16744",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L14309 and L16874",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevIcon defined at L7902 and L16875",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: html defined at L9699 and L16878",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: score defined at L16143 and L16887",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L16715 and L16897",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: deltaStr defined at L7118 and L16908",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: chain defined at L6776 and L16922",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: actions defined at L11943 and L16940",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rank defined at L14592 and L16946",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: btn defined at L16726 and L16975",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: status defined at L12695 and L16977",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: body defined at L7637 and L16978",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L4817 and L17043",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: obj defined at L17035 and L17050",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L17043 and L17107",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas defined at L16141 and L17109",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L13160 and L17129",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L15334 and L17155",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L17155 and L17241",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L17241 and L17291",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevCol defined at L11950 and L17355",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: crca defined at L2789 and L17428",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: d1 defined at L13203 and L17430",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: v1 defined at L13211 and L17431",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L14295 and L17432",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: h1 defined at L13204 and L17433",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L13207 and L17434",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L15913 and L17477",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: intelEl defined at L16074 and L17605",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: fallback defined at L12677 and L17607",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp2 defined at L12954 and L17628",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L12953 and L17629",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev2 defined at L12949 and L17630",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L16142 and L17632",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas2 defined at L12959 and L17633",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: segs defined at L6695 and L17634",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tsIO defined at L12128 and L17636",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct2 defined at L15593 and L17643",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: scaPct defined at L2716 and L17645",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hwEnqPct defined at L10229 and L17652",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: physDelta defined at L13724 and L17659",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topSql defined at L12975 and L17696",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: logonRate defined at L16620 and L17705",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _execPerLogon defined at L9271 and L17713",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: scorecardHtml defined at L16231 and L17846",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: SQL_VERDICTS defined at L17781 and L17865",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _esc defined at L10169 and L17866",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sid defined at L12620 and L17867",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: key defined at L4684 and L17967",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: items defined at L8070 and L17968",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reason defined at L15949 and L18089",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: label defined at L15680 and L18131",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reason defined at L18089 and L18132",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: crca defined at L17428 and L18156",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1 defined at L12955 and L18157",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L17434 and L18158",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L17432 and L18159",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1 defined at L13208 and L18160",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L17632 and L18162",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L17629 and L18163",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: f0 defined at L11946 and L18165",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dtChange defined at L6261 and L18173",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _ev defined at L11854 and L18176",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sql1Map defined at L12970 and L18187",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlAtt defined at L17638 and L18188",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1x defined at L13801 and L18190",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L15583 and L18191",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe1 defined at L15584 and L18192",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isNew defined at L15787 and L18193",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isPlanChg defined at L10965 and L18194",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pctDb defined at L15784 and L18195",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: gets defined at L16266 and L18196",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execs defined at L9728 and L18197",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct defined at L14382 and L18200",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topSql defined at L17696 and L18218",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: domSql defined at L16164 and L18225",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: domSqlShare defined at L17697 and L18226",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L17129 and L18231",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitName defined at L16292 and L18232",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitPct defined at L16293 and L18233",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct2 defined at L17643 and L18235",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: logSyncEv defined at L2706 and L18236",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: latchPct2 defined at L17646 and L18239",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hwEnqPct defined at L17652 and L18244",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txIdxPct defined at L10230 and L18245",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txRowPct defined at L10231 and L18246",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: usEnqPct defined at L10217 and L18247",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sf defined at L17690 and L18314",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ra defined at L9023 and L18317",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rb defined at L7299 and L18318",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ratio defined at L9702 and L18326",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sf defined at L18314 and L18327",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ra defined at L18317 and L18330",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rb defined at L18318 and L18331",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas2 defined at L17633 and L18344",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: prev defined at L13072 and L18378",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _mechText defined at L11875 and L18500",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: part1 defined at L16296 and L18515",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe1Str defined at L18524 and L18527",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbl defined at L6491 and L18533",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: seqPct defined at L17644 and L18552",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: scaPct defined at L17645 and L18553",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasGood defined at L2849 and L18588",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: part2 defined at L16303 and L18691",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epeRatio defined at L14599 and L18694",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epeStr defined at L18520 and L18756",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbl defined at L18533 and L18788",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cursorPinXPct defined at L17647 and L18801",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: seqPct defined at L18552 and L18816",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lsWait defined at L18560 and L18849",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: redoPct defined at L17660 and L18852",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: part3 defined at L16319 and L18944",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: severity defined at L8730 and L18951",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lsWait defined at L18849 and L18988",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hv1 defined at L18705 and L19038",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lsWait defined at L18988 and L19164",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L15896 and L19267",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: icon defined at L7534 and L19268",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: prev defined at L18378 and L19299",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L7335 and L19319",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L19319 and L19338",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L13074 and L19340",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: prev defined at L19299 and L19361",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L19340 and L19362",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cur defined at L19304 and L19376",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L17107 and L19433",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _kbNar defined at L16206 and L19474",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _panelEvidence defined at L16554 and L19477",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badgeCol defined at L16267 and L19582",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cc defined at L15335 and L19609",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cb defined at L14987 and L19610",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlChip defined at L7840 and L19611",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: fqId defined at L14997 and L19627",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: chainHtml defined at L11359 and L19714",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _pv defined at L18178 and L20003",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _lbl2 defined at L9513 and L20004",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _lbl1 defined at L10824 and L20005",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _isNew defined at L14522 and L20012",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _esc defined at L17866 and L20208",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: notes defined at L14926 and L20485",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pi defined at L7786 and L20557",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L19433 and L20563",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L12702 and L20671",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: map1 defined at L15134 and L20799",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevOrder defined at L8753 and L20807",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rows defined at L14062 and L20815",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: f1 defined at L7894 and L20819",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tableRows defined at L9538 and L20909",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rowBg defined at L11140 and L20911",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: filtered defined at L15109 and L20995",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: body defined at L16978 and L21091",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: arrow defined at L14869 and L21093",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L16686 and L21317",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: addm defined at L16717 and L21324",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: items defined at L17968 and L21330",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqls defined at L16138 and L21357",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlReg defined at L3044 and L21359",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L20671 and L21361",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L15157 and L21367",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execs defined at L18197 and L21368",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L16298 and L21369",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dbTimeSecs defined at L9079 and L21399",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txt defined at L15500 and L21417",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: h defined at L16135 and L21487",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: active defined at L20643 and L21495",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: barColor defined at L9446 and L21547",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L9018 and L21591",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rowsHtml defined at L17844 and L21593",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pctDb defined at L18195 and L21595",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reg defined at L15511 and L21599",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tables defined at L6288 and L21601",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: peHints defined at L21548 and L21682",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L21367 and L21727",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isActive defined at L20683 and L21747",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L21361 and L21783",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L21317 and L21790",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: meta defined at L16690 and L21791",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L18159 and L21793",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colors defined at L15041 and L22004",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: resp defined at L17007 and L22036",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lineBuffer defined at L17027 and L22046",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reader defined at L17025 and L22050",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: decoder defined at L17026 and L22051",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L20563 and L22061",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ln defined at L17047 and L22063",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: obj defined at L17050 and L22065",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L21783 and L22096",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _e defined at L21786 and L22131",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _n defined at L21787 and L22132",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: conf defined at L8042 and L22138",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: actions defined at L16940 and L22143",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: evidence defined at L12992 and L22154",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L19267 and L22170",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: html defined at L16878 and L22194",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rank defined at L16946 and L22208",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: effort defined at L16947 and L22212",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aCol defined at L22180 and L22268",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: top defined at L12105 and L22306",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L22061 and L22308",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: good defined at L7114 and L22342",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bad defined at L8132 and L22343",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: allIds defined at L6883 and L22390",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: good defined at L22342 and L22392",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bad defined at L22343 and L22393",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execs defined at L21368 and L22458",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuRatio defined at L21373 and L22466",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: planHash defined at L21375 and L22476",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L19362 and L22618",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L16577 and L22620",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epeD defined at L11135 and L22637",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: severity defined at L18951 and L22642",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confidence defined at L10512 and L22684",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L19338 and L22704",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: results defined at L22702 and L22722",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: appearedIn defined at L22658 and L22726",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: supportingSections defined at L22659 and L22727",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hasASH defined at L22660 and L22728",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: evidenceScore defined at L22664 and L22730",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: confidence defined at L22684 and L22742",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L16874 and L22749",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: results defined at L22722 and L22782",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: newSqls defined at L5063 and L22797",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: map defined at L20885 and L22831",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rowsDelta defined at L22653 and L22867",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe2 defined at L18191 and L22869",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execDelta defined at L4646 and L22872",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txt defined at L21417 and L22948",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tables defined at L21601 and L22950",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: reg defined at L21599 and L22987",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L17291 and L22988",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L15512 and L22996",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: planChg defined at L15586 and L22998",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuRatio defined at L22466 and L23002",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: isIoBound defined at L18341 and L23004",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuStr defined at L18547 and L23094",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rowBg defined at L20911 and L23096",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ashEvt defined at L23006 and L23122",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ashSrc defined at L23008 and L23124",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _execs defined at L9244 and L23269",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _rows defined at L15332 and L23272",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: execGood defined at L22870 and L23317",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: active defined at L21495 and L23403",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L21727 and L23435",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L21591 and L23439",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: active defined at L23403 and L23449",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ind defined at L23405 and L23450",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colFn defined at L23415 and L23455",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L23435 and L23458",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L23439 and L23460",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: active defined at L23449 and L23468",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ind defined at L23450 and L23469",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colFn defined at L23455 and L23474",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sorted defined at L23458 and L23477",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L23460 and L23479",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L22996 and L23496",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txt defined at L22948 and L23497",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sid defined at L17867 and L23498",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sr defined at L23627 and L23650",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: mod defined at L23496 and L23661",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlText defined at L15513 and L23669",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: good defined at L22392 and L23682",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L21793 and L23683",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _vSeverity defined at L14289 and L23697",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pi defined at L20557 and L23716",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nIssue defined at L23797 and L23964",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nDetail defined at L23798 and L23965",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nTxt defined at L23799 and L23966",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nTypeStr defined at L23800 and L23967",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _ntc defined at L23801 and L23968",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nTypeBadge defined at L23802 and L23969",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nAddmRef defined at L23803 and L23970",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nRegistryTbls defined at L23804 and L23972",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nBackendTbls defined at L23805 and L23973",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nTbls defined at L23806 and L23974",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nDetId defined at L23807 and L23976",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nPh defined at L23808 and L23978",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nAshB defined at L23809 and L23980",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nBadgeColors defined at L23810 and L23982",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nVerifyBadge defined at L23811 and L23983",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nMsgHtml defined at L23812 and L23986",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nAddmBadge defined at L23813 and L23990",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nTabHtml defined at L23814 and L23998",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nTextVerified defined at L23815 and L24001",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nDetRow defined at L23816 and L24003",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _nMainRow defined at L23854 and L24076",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dDetId defined at L23882 and L24118",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dDetail defined at L23874 and L24119",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dTxt defined at L23875 and L24120",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dTypeStr defined at L23876 and L24121",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dtc defined at L23877 and L24122",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dTypeBadge defined at L23878 and L24123",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dMod defined at L23879 and L24124",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dTbls defined at L23880 and L24125",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dDetRow defined at L23883 and L24128",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dRow defined at L23918 and L24164",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L16897 and L24324",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: report defined at L16073 and L24591",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: si defined at L16720 and L24592",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _aasB defined at L5325 and L24596",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _cpuCnt defined at L5323 and L24597",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp defined at L16703 and L24620",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _aasG defined at L5324 and L24624",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _aasRatio defined at L24601 and L24649",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: st defined at L12597 and L24701",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: f defined at L17700 and L24703",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L22620 and L24709",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: badge defined at L17477 and L24721",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ds defined at L15672 and L24735",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _elGoodMin defined at L14335 and L24754",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _elBadMin defined at L14336 and L24755",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: nc defined at L2946 and L24765",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pe defined at L6412 and L24800",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuCount defined at L3040 and L24819",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ratio defined at L18326 and L24838",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: clr defined at L24740 and L24849",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: clr defined at L24849 and L24853",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasB defined at L10201 and L24879",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pi defined at L23716 and L24932",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sessionRelevant defined at L24937 and L24946",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sevColors defined at L24297 and L24947",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl defined at L10774 and L24979",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lcMap defined at L24973 and L24980",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _ev2 defined at L13423 and L25016",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _topWaitName defined at L17513 and L25019",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _waitDominated defined at L10298 and L25025",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _verdict defined at L11390 and L25027",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _topSqlId defined at L17511 and L25029",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevOrder defined at L20807 and L25140",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: report defined at L24591 and L25173",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: si defined at L24592 and L25174",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: st defined at L24701 and L25180",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ei defined at L24965 and L25181",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuCount defined at L24819 and L25186",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1 defined at L18157 and L25187",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s2 defined at L12956 and L25188",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev2 defined at L17630 and L25191",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L18158 and L25192",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eff1 defined at L13209 and L25193",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eff2 defined at L17631 and L25194",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp1 defined at L18163 and L25195",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp2 defined at L17628 and L25196",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: num defined at L7892 and L25208",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bufHit defined at L9065 and L25243",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: softParse defined at L9067 and L25244",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L18231 and L25246",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitName defined at L18232 and L25247",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWaitPct defined at L18233 and L25248",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: level defined at L7345 and L25256",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: connPerMinB defined at L24859 and L25334",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: connPerMinC defined at L24860 and L25335",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: queuingC defined at L24897 and L25365",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: queuingB defined at L24896 and L25366",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lps defined at L13229 and L25535",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ctx defined at L21790 and L25553",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp1 defined at L13329 and L25555",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp2 defined at L2250 and L25556",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: notes defined at L20485 and L25631",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct2 defined at L9445 and L25637",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L22618 and L25641",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _lpv defined at L25199 and L25643",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: softParse2 defined at L13332 and L25713",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: exec2 defined at L2249 and L25741",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: notes defined at L25631 and L25761",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L24709 and L25763",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _lpv defined at L25643 and L25764",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: logSync defined at L10914 and L25766",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioPct defined at L16161 and L25776",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hint defined at L6287 and L25778",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp defined at L9086 and L25788",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L22308 and L25804",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: icons defined at L7421 and L25818",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L22096 and L25820",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rca defined at L16131 and L25861",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: db defined at L16133 and L25863",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: h defined at L21487 and L25864",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: findings defined at L24324 and L25867",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: evidence defined at L22154 and L25869",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: events defined at L16137 and L25871",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqls defined at L21357 and L25872",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp defined at L24620 and L25873",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eff defined at L16139 and L25874",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: addm defined at L21324 and L25875",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sqlReg defined at L21359 and L25876",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: score defined at L16887 and L25879",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aas defined at L17109 and L25883",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpus defined at L18162 and L25884",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _e defined at L22131 and L25887",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _n defined at L22132 and L25888",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: domSql defined at L18225 and L25902",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: domIsDML defined at L16167 and L25904",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: aasRatio defined at L16211 and L25940",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: riskCol defined at L16103 and L25942",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: html defined at L22194 and L25961",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: role defined at L11512 and L26101",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: roleCol defined at L11513 and L26102",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L21369 and L26157",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpe defined at L21372 and L26158",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: txt defined at L23497 and L26179",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: epe defined at L26157 and L26180",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L22749 and L26181",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevCol defined at L17355 and L26182",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L22170 and L26225",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: crca defined at L18156 and L26324",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: s1 defined at L25187 and L26326",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L23683 and L26328",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: d1 defined at L17430 and L26330",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L25192 and L26332",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L25641 and L26334",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rca2 defined at L2844 and L26336",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: btn2 defined at L18339 and L26338",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: now defined at L25877 and L26340",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sevColor defined at L9704 and L26344",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: html defined at L25961 and L26350",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: blob defined at L26307 and L26568",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: url defined at L26308 and L26570",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L25804 and L26590",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ioLedSqls defined at L24325 and L26608",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L25820 and L26683",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bad defined at L22393 and L26686",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl2 defined at L21794 and L26687",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev2 defined at L25191 and L26688",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cls defined at L16732 and L26743",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topWait defined at L25246 and L26758",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuEv defined at L3390 and L26769",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cpuPct defined at L18200 and L26770",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L26225 and L26777",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L26777 and L26787",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tableRows defined at L20909 and L26799",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L26181 and L26800",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ann defined at L26778 and L26801",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: barW defined at L26788 and L26803",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: latCls defined at L26802 and L26829",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ann defined at L26801 and L26907",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: events defined at L25871 and L27008",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colors defined at L22004 and L27078",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: d1 defined at L26330 and L27080",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: d2 defined at L2788 and L27086",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: top defined at L22306 and L27100",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L26590 and L27102",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: good defined at L23682 and L27124",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl1 defined at L26328 and L27125",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ev1 defined at L26332 and L27126",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: map1 defined at L20799 and L27128",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: allNames defined at L15145 and L27130",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rows defined at L20815 and L27132",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _v defined at L23693 and L27135",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _vPrimaryVerdict defined at L23696 and L27136",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _vSeverity defined at L23697 and L27137",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _vRootCause defined at L14290 and L27138",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _vTopCulprit defined at L23694 and L27139",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _vTopSqlId defined at L23695 and L27140",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sqlCorr defined at L23699 and L27141",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wn defined at L12584 and L27151",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wn defined at L27151 and L27160",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pi defined at L24932 and L27172",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _waitKB defined at L26697 and L27181",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: nl defined at L26727 and L27204",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _pvLabel defined at L24296 and L27224",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sevColors defined at L24947 and L27225",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sc defined at L24948 and L27226",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _alignIcon defined at L24303 and L27231",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct1 defined at L25639 and L27285",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: e2 defined at L21320 and L27288",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct2 defined at L25637 and L27289",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L26787 and L27305",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cls defined at L26743 and L27326",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: col defined at L27305 and L27334",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl defined at L24979 and L27336",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: assess defined at L27052 and L27437",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ann defined at L26907 and L27441",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L26683 and L27523",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: segs defined at L17634 and L27525",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _key defined at L2693 and L27529",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L22704 and L27550",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _dTxt defined at L24120 and L27558",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _kb defined at L12458 and L27601",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tables defined at L22950 and L27623",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: deltas defined at L4540 and L27655",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L27550 and L27731",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: g defined at L27731 and L27756",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: prD defined at L6760 and L27801",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: conf defined at L22138 and L27813",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: topSql defined at L18218 and L27930",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _catLabels defined at L25926 and L27971",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sevCol defined at L24298 and L27973",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sc defined at L15783 and L28002",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cc defined at L19609 and L28003",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _isNew defined at L20012 and L28007",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dCol defined at L11558 and L28009",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: barW defined at L26803 and L28012",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: catLabel defined at L16204 and L28014",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: allChecks defined at L22279 and L28043",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cr defined at L20741 and L28186",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sr defined at L6686 and L28188",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sr defined at L28188 and L28195",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cr defined at L28186 and L28197",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cat defined at L22988 and L28205",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sev defined at L26800 and L28206",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L27523 and L28302",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: top defined at L27100 and L28335",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: labels defined at L15469 and L28337",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: data defined at L7647 and L28338",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: colors defined at L27078 and L28339",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: totalPct defined at L5067 and L28341",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: meta defined at L21791 and L28360",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: el defined at L28302 and L28365",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: ds defined at L24735 and L28402",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: total defined at L9482 and L28430",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: name defined at L9610 and L28444",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cls defined at L27326 and L28445",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: pct defined at L25763 and L28446",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: avgMs defined at L11079 and L28447",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L23479 and L28468",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: rows defined at L27132 and L28470",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: tbody defined at L28468 and L28495",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: wc defined at L15900 and L28501",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lp defined at L25873 and L28683",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eff2 defined at L25194 and L28684",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: eff1 defined at L25193 and L28685",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: hp2 defined at L25556 and L28686",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sp2 defined at L13683 and L28687",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: bcHit1 defined at L21321 and L28689",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: improved defined at L26600 and L28695",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: nl defined at L27204 and L28701",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: nl defined at L28701 and L28710",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L26334 and L28711",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sigCol defined at L13759 and L28717",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: parts defined at L27102 and L28772",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: kb defined at L26905 and L28793",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: delta defined at L28711 and L28795",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: cc defined at L28003 and L28796",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _sc defined at L27226 and L28823",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _contribs defined at L23335 and L28824",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: _rLower defined at L27464 and L28827",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: text defined at L7535 and L28886",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: sections defined at L4699 and L28907",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: labels defined at L28337 and L28911",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: dot defined at L10771 and L28913",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: lbl defined at L27336 and L28916",
+      "detail": ""
+    },
+    {
+      "type": "WARNING",
+      "test": "Possible duplicate: obs defined at L17365 and L28924",
+      "detail": ""
+    }
+  ]
+}

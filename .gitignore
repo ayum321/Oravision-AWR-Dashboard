@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+
+# NEVER commit secrets
+.streamlit/secrets.toml
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Compiled AWR reports (if generated locally)
+*.html.report
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
