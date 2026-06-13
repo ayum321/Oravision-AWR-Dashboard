@@ -24,7 +24,7 @@ Python download: https://www.python.org/downloads/
 
 1. Unzip to any folder (e.g. `C:\Tools\awr-dashboard\`)
 2. Double-click **`start.bat`**
-3. The browser opens at `http://localhost:8000`
+3. The browser opens automatically (usually `http://localhost:8000`)
 4. Upload one or two AWR HTML reports and click **Analyse**
 
 > **First launch** installs Python packages (~30 seconds). All subsequent starts are instant.
@@ -47,7 +47,7 @@ To stop: press `Ctrl+C` in the terminal window that `start.bat` opened.
 AWR HTML upload (browser)
   │
   ▼
-FastAPI backend  (backend/main.py, port 8000)
+FastAPI backend  (backend/main.py, dynamic port 8000–8009)
   │
   ├── HTML parser          (services/html_parser.py)
   │     Extracts: wait events, SQL stats, load profile, system stats, I/O, redo
