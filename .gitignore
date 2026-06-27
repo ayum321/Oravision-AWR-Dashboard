@@ -25,6 +25,11 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+.claude/
+
+# Local backup copies
+* - Copy.*
+*- Copy.html
 
 # Runtime data (generated at startup — not source)
 backend/uploads/

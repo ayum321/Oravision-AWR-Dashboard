@@ -2266,7 +2266,7 @@ def _build_normalized_comparison(
         ("db_time_total", good_summary.db_time_secs / 60, bad_summary.db_time_secs / 60,
          "DB Time (min)", "min", True, "Total database active time. Core load indicator.", True),
         ("aas", good_summary.aas, bad_summary.aas,
-         "Avg Active Sessions", "", True, "Sessions actively working. >CPU count = saturation.", True),
+         "Avg Active Sessions", "", True, "Sessions actively working. >CPU count = possible saturation — cross-check DB CPU% share before concluding.", True),
         ("txn_per_sec", good_summary.txn_per_sec, bad_summary.txn_per_sec,
          "Transactions/sec", "/sec", False, "Business throughput KPI (commits+rollbacks per second).",
          good_summary.txn_per_sec_available and bad_summary.txn_per_sec_available),

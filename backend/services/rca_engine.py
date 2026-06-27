@@ -1089,7 +1089,9 @@ def run_rca(data: dict) -> dict:
             e for e in events_sorted
             if e.get("wait_class", "").lower() not in _IDLE_CLASSES
             and "idle" not in e.get("event_name", "").lower()
-            and "message" not in e.get("event_name", "").lower()
+            # Exclude 'SQL*Net message FROM client' (Idle — client think-time, not a DB bottleneck).
+            # Do NOT exclude 'SQL*Net message TO client' — that is a Network-class wait and IS a real signal.
+            and "message from client" not in e.get("event_name", "").lower()
         ]
         # Primary event = #1 non-idle wait (this IS the symptom)
         primary_event = non_idle_events[0] if non_idle_events else events_sorted[0]
@@ -1227,12 +1229,19 @@ def run_rca(data: dict) -> dict:
                     f"Reducing latency from {avg_wait_ms:.0f}ms to <5ms would recover ~{event_pct * 0.5:.0f}% DB time", "high"))
 
         elif "scattered" in event_lower:
-            findings.append(_finding("I/O",
-                "warning" if event_pct > 10 else "info",
-                f"db file scattered read: {event_pct:.1f}% DB Time",
-                f"Full table scans consuming {event_pct:.1f}% of DB time. "
-                f"Avg wait {avg_wait_ms:.1f}ms, {total_waits:,} waits. Check segments by physical reads for hot tables.",
-                f"{event_pct:.1f}%", "< 5% DB time", "Top Wait Events"))
+            sev_scat = "critical" if avg_wait_ms > 10 else "warning" if event_pct > 10 else "info"
+            detail_scat = (
+                f"Multi-block full table scan I/O: {event_pct:.1f}% DB time, avg {avg_wait_ms:.1f}ms, {total_waits:,} waits."
+            )
+            if avg_wait_ms > 10:
+                detail_scat += " Avg wait >10ms indicates STORAGE LATENCY on full scans — check tablespace I/O stats."
+            elif event_pct > 10:
+                detail_scat += " High scan volume — check segments by physical reads for hot tables and review execution plans for missing indexes."
+            else:
+                detail_scat += " Check segments by physical reads for hot tables."
+            findings.append(_finding("I/O", sev_scat,
+                f"db file scattered read: {event_pct:.1f}% DB Time (avg {avg_wait_ms:.1f}ms)",
+                detail_scat, f"{event_pct:.1f}% / {avg_wait_ms:.1f}ms", "< 10% DB time / < 10ms avg", "Top Wait Events"))
 
         elif "direct path read" in event_lower and "temp" not in event_lower:
             findings.append(_finding("I/O",
@@ -1300,6 +1309,76 @@ def run_rca(data: dict) -> dict:
                 f"Check segments by buffer busy waits for the hot object.",
                 f"{event_pct:.1f}%", "< 3% DB time", "Top Wait Events"))
 
+        elif "cache buffers chains" in event_lower:
+            # CBC latch = hot block contention. Latches should be acquired in microseconds.
+            # Even 1ms avg wait is abnormal. >5ms avg wait = severe concurrency bottleneck.
+            sev_cbc = "critical" if avg_wait_ms > 5 or event_pct > 20 else "warning" if event_pct > 5 else "info"
+            detail_cbc = (
+                f"Cache Buffer Chain latch: {event_pct:.1f}% DB time, avg {avg_wait_ms:.1f}ms, {total_waits:,} waits. "
+                f"Latches are lightweight serialization locks that should be acquired in microseconds. "
+            )
+            if avg_wait_ms > 5:
+                detail_cbc += (
+                    f"Avg wait of {avg_wait_ms:.1f}ms is extremely high for a latch — indicates severe hot block contention. "
+                    f"Multiple sessions are simultaneously scanning the same DB buffer cache chains. "
+                )
+            else:
+                detail_cbc += "Even sub-millisecond latch waits at this volume indicate significant concurrency pressure. "
+            detail_cbc += (
+                f"Root cause: hot data blocks accessed by many concurrent sessions. "
+                f"Investigation path: SQL ordered by Buffer Gets identifies the high-logical-I/O queries driving this latch. "
+                f"Segments by Logical Reads identifies the hot object."
+            )
+
+            # Cross-reference latch activity section for miss/sleep breakdown
+            latch_data = data.get("_latch_activity", [])
+            cbc_entry = next(
+                (l for l in latch_data if "cache buffers chains" in l.get("latch_name", "").lower()), None
+            )
+            if cbc_entry:
+                miss_pct_cbc = cbc_entry.get("miss_pct", 0)
+                sleep_pct_cbc = cbc_entry.get("sleep_pct", 0)
+                latch_gets = cbc_entry.get("gets", 0)
+                if miss_pct_cbc > 0:
+                    detail_cbc += (
+                        f" Latch Activity: {latch_gets:,} gets, miss rate {miss_pct_cbc:.2f}%"
+                    )
+                    if sleep_pct_cbc > 50:
+                        detail_cbc += f", sleep rate {sleep_pct_cbc:.0f}% — spinning is NOT helping, sessions are sleeping. Severe."
+                    elif sleep_pct_cbc > 20:
+                        detail_cbc += f", sleep rate {sleep_pct_cbc:.0f}% — moderate spinning."
+                    else:
+                        detail_cbc += f", sleep rate {sleep_pct_cbc:.0f}%."
+
+            # Identify top SQL by buffer gets as the primary driver
+            high_gets_sqls = sorted(
+                [s for s in sqls if _safe_int(s.get("buffer_gets", 0)) > 0],
+                key=lambda s: _safe_int(s.get("buffer_gets", 0)),
+                reverse=True
+            )
+            if high_gets_sqls:
+                top_g = high_gets_sqls[0]
+                top_g_id = top_g.get("sql_id", "?")
+                top_g_gets = _safe_int(top_g.get("buffer_gets", 0))
+                top_g_execs = max(_safe_int(top_g.get("executions", 1)), 1)
+                top_g_per_exec = top_g_gets // top_g_execs
+                detail_cbc += (
+                    f" Top SQL by Buffer Gets: {top_g_id} — "
+                    f"{top_g_gets:,} gets ({top_g_per_exec:,}/exec). Most likely CBC driver."
+                )
+
+            findings.append(_finding("Concurrency", sev_cbc,
+                f"CBC Latch Contention: {event_pct:.1f}% DB Time (avg {avg_wait_ms:.1f}ms)",
+                detail_cbc,
+                f"{event_pct:.1f}% / {avg_wait_ms:.1f}ms",
+                "< 5% DB time / < 0.1ms avg",
+                "Top Wait Events"))
+            remediations.append(_remediation(1, "Concurrency",
+                f"CBC latch contention at {event_pct:.1f}% DB time (avg {avg_wait_ms:.1f}ms)",
+                "Reduce logical I/O per SQL execution. Find the hot table/index — consider hash partitioning or reverse-key index.",
+                "-- Top SQL by Buffer Gets (primary driver of CBC contention):\nSELECT sql_id, buffer_gets, executions,\n       ROUND(buffer_gets/GREATEST(executions,1)) gets_per_exec,\n       SUBSTR(sql_text,1,80) sql_text\nFROM v$sql ORDER BY buffer_gets DESC FETCH FIRST 10 ROWS ONLY;\n-- Hot segments by logical reads:\nSELECT object_name, object_type, value logical_reads\nFROM v$segment_statistics\nWHERE statistic_name = 'logical reads'\nORDER BY value DESC FETCH FIRST 10 ROWS ONLY;\n-- Latch contention detail:\nSELECT name, gets, misses, ROUND(misses/GREATEST(gets,1)*100,2) miss_pct,\n       sleeps, ROUND(sleeps/GREATEST(misses,1)*100,2) sleep_pct\nFROM v$latch WHERE name = 'cache buffers chains';",
+                f"Reducing CBC contention could recover {event_pct:.0f}% DB time", "high"))
+
         elif "enq" in event_lower and "tx" in event_lower and "index" in event_lower:
             findings.append(_finding("Concurrency",
                 "warning" if event_pct > 3 else "info",
@@ -1355,12 +1434,29 @@ def run_rca(data: dict) -> dict:
                 f"Eliminating HW contention could recover {event_pct:.0f}% DB time", "low"))
 
         elif "enq" in event_lower and "tx" in event_lower:
-            findings.append(_finding("Application",
-                "warning" if event_pct > 2 else "info",
-                f"Row Lock Contention: {event_pct:.1f}% DB Time",
-                f"Sessions waiting for row locks. Application-level lock contention. "
-                f"Check segments by row lock waits to find the hot table.",
-                f"{event_pct:.1f}%", "< 2% DB time", "Top Wait Events"))
+            sev_tx = "critical" if avg_wait_ms > 200 or event_pct > 10 else "warning" if event_pct > 2 else "info"
+            detail_tx = (
+                f"Row lock contention: {event_pct:.1f}% DB time, avg {avg_wait_ms:.1f}ms, {total_waits:,} waits. "
+                f"Sessions waiting for another session to commit or rollback a locked row. "
+                f"Application-level contention — belongs to Application wait class, not Concurrency. "
+            )
+            if avg_wait_ms > 200:
+                detail_tx += (
+                    f"Avg wait of {avg_wait_ms:.1f}ms is high — indicates long lock hold times or blocked "
+                    f"sessions accumulating. Check segments by row lock waits to find the hot table. "
+                    f"Find the blocking session and its uncommitted DML."
+                )
+            else:
+                detail_tx += "Check segments by row lock waits to find the hot table and the blocking SQL."
+            findings.append(_finding("Application", sev_tx,
+                f"Row Lock Contention: {event_pct:.1f}% DB Time (avg {avg_wait_ms:.1f}ms)",
+                detail_tx,
+                f"{event_pct:.1f}% / {avg_wait_ms:.1f}ms", "< 2% DB time", "Top Wait Events"))
+            remediations.append(_remediation(1, "Application",
+                f"Row lock contention at {event_pct:.1f}% DB time (avg {avg_wait_ms:.1f}ms)",
+                "Find the blocking session and hot table. Reduce lock hold time — commit more frequently, fix application logic.",
+                "-- Find blocking sessions and locked objects:\nSELECT s.sid, s.serial#, s.username, s.status,\n       lo.object_id, o.object_name, o.object_type,\n       s.sql_id, s.seconds_in_wait\nFROM v$session s\nJOIN v$locked_object lo ON lo.session_id = s.sid\nJOIN dba_objects o ON o.object_id = lo.object_id\nWHERE s.event = 'enq: TX - row lock contention'\nORDER BY s.seconds_in_wait DESC;\n-- Hot objects by row lock waits (AWR):\nSELECT owner, object_name, object_type, value row_lock_waits\nFROM dba_hist_seg_stat s JOIN dba_objects o ON o.object_id = s.obj#\nWHERE statistic_name = 'row lock waits'\nORDER BY value DESC FETCH FIRST 10 ROWS ONLY;",
+                f"Eliminating row locks could recover {event_pct:.0f}% DB time", "medium"))
 
     # ═══ STEP 4: SQL Evidence ════════════════════════════════════
     step_num += 1

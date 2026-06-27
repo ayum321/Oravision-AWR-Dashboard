@@ -249,6 +249,21 @@ Fix: pre-allocate extent space, use ASSM, or reduce parallelism.
 Global Cache cross-instance block transfer in Oracle RAC.
 Cause: blocks accessed on multiple instances without partition pruning.
 Fix: application partitioning to pin workloads to specific RAC nodes.
+
+=== gc cr grant congested / gc current block congested (RAC only) ===
+Global Cache transfer path is congested, not just busy.
+Cause: interconnect pressure, node imbalance, or hot-object ownership ping-pong under load.
+Fix: validate interconnect latency and packet health first, then enforce service/data affinity.
+
+=== SQL*Net message from client ===
+Client think-time/idle event. Usually not a database bottleneck.
+Cause: application pauses between fetch/execute calls or pooled idle sessions.
+Fix: do not tune database internals for this event alone; correlate only with active non-idle waits.
+
+=== SQL*Net message to client ===
+Server is sending data back to client.
+Cause: chatty fetch pattern (small arraysize) or network round-trip overhead.
+Fix: increase fetch arraysize/batching in the application and validate network latency.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────

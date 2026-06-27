@@ -1232,6 +1232,7 @@ def _parse_os_stats(soup: BeautifulSoup) -> dict[str, Any]:
     total = busy + idle
     if total > 0:
         stats["cpu_busy_pct"] = round(busy / total * 100, 2)
+        stats["cpu_idle_pct"] = round(idle / total * 100, 2)
         stats["iowait_pct"] = round(iowait / total * 100, 2)
     else:
         # Use detail percentages as fallback
@@ -1240,6 +1241,8 @@ def _parse_os_stats(soup: BeautifulSoup) -> dict[str, Any]:
         detail_iowait = stats.pop("_detail_iowait_pct", 0)
         if detail_busy > 0:
             stats["cpu_busy_pct"] = detail_busy
+        if detail_idle > 0:
+            stats["cpu_idle_pct"] = detail_idle
         if detail_iowait > 0:
             stats["iowait_pct"] = detail_iowait
 
@@ -1654,10 +1657,12 @@ def _parse_latch_activity(soup: BeautifulSoup) -> list[dict[str, Any]]:
             entry["sleeps"] = _parse_int(row[sleeps_idx])
         if spin_idx is not None and spin_idx < len(row):
             entry["spin_gets"] = _parse_int(row[spin_idx])
-        # Compute miss ratio
+        # Compute miss ratio and sleep ratio
         gets = entry.get("gets", 0)
         misses = entry.get("misses", 0)
+        sleeps_val = entry.get("sleeps", 0)
         entry["miss_pct"] = round(misses / gets * 100, 2) if gets > 0 else 0.0
+        entry["sleep_pct"] = round(sleeps_val / misses * 100, 2) if misses > 0 else 0.0
         results.append(entry)
 
     # Sort by misses descending

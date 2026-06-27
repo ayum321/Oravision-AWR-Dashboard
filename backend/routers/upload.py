@@ -51,7 +51,7 @@ def _parse_and_store(html_content: str, label: str) -> dict:
     return data_dict
 
 
-_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB — generous for AWR HTML reports
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB hard limit — matches client-side guard
 
 
 @router.post("/awr")

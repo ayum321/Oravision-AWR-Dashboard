@@ -5,6 +5,7 @@
 <head>
 
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OraVision AWR Tool</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='32' y2='32' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0%25' stop-color='%233b82f6'/%3E%3Cstop offset='50%25' stop-color='%236366f1'/%3E%3Cstop offset='100%25' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='url(%23g)'/%3E%3Cellipse cx='13.5' cy='10' rx='5.5' ry='2.5' fill='none' stroke='%23fff' stroke-width='1.3'/%3E%3Cpath d='M8 10v7.5c0 1.38 2.46 2.5 5.5 2.5' fill='none' stroke='%23fff' stroke-width='1.3'/%3E%3Cpath d='M19 10v2c0 .8-.8 1.5-2 2' fill='none' stroke='%23fff' stroke-width='1.3'/%3E%3Ccircle cx='21.5' cy='19.5' r='4' fill='rgba(255,255,255,0.15)' stroke='%23fff' stroke-width='1.4'/%3E%3Cline x1='24.3' y1='22.3' x2='27' y2='25' stroke='%23fff' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/css/tailwind.min.css">
@@ -169,6 +170,24 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
 
+        /* Respect user's motion preference — suppress decorative animations */
+        @media (prefers-reduced-motion: reduce) {
+            .fade-in, .fade-in-d1, .fade-in-d2, .fade-in-d3, .fade-in-d4, .slide-in {
+                animation: none !important;
+                opacity: 1 !important;
+                transform: none !important;
+            }
+            .health-ring, .lps-ring, .gauge-fill, .progress-ring-circle, .confidence-bar {
+                transition: none !important;
+            }
+            .evidence-connector, .sql-tag-plan-changed {
+                animation: none !important;
+            }
+            .logo-ring, .loader-orbit, .loader-core {
+                animation: none !important;
+            }
+        }
+
         @keyframes fadeInUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 
         @keyframes pulse-glow        { 0%,100% { box-shadow: 0 0 8px rgba(6,182,212,0.2); }    50% { box-shadow: 0 0 20px rgba(6,182,212,0.4); } }
@@ -283,7 +302,7 @@
             flex-shrink: 0;
             position: relative;
             background: rgba(10,14,25,0.8);
-            color: #374151;
+            color: #64748b;
         }
         .sql-tab-btn:hover {
             color: #94a3b8;
@@ -1586,7 +1605,7 @@
 <div class="flex min-h-screen">
 
     <!-- ── PREMIUM SIDEBAR ──────────────────────────────────────────── -->
-    <aside id="main-sidebar" class="w-[220px] flex flex-col py-4 px-3 shrink-0 h-screen overflow-y-auto overflow-x-hidden"
+    <aside id="main-sidebar" aria-label="Application navigation" class="w-[220px] flex flex-col py-4 px-3 shrink-0 h-screen overflow-y-auto overflow-x-hidden"
         style="background:#07101f;border-right:1px solid rgba(99,102,241,0.15);position:fixed;top:0;left:0;z-index:50;">
 
         <!-- Ambient orbs -->
@@ -1909,7 +1928,7 @@
 
                                     <input type="text" id="label1" value="Good period AWR"
 
-                                        class="ml-auto w-36 rounded-lg px-3 py-1 text-xs font-semibold transition focus:outline-none" style="border:1px solid rgba(34,197,94,0.25);background:rgba(34,197,94,0.08);color:#4ade80">
+                                        class="ml-auto w-36 rounded-lg px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-1 focus:ring-green-400/40" style="border:1px solid rgba(34,197,94,0.25);background:rgba(34,197,94,0.08);color:#4ade80">
 
                                 </div>
 
@@ -1945,7 +1964,7 @@
 
                                     <input type="text" id="label2" value="Bad period AWR"
 
-                                        class="ml-auto w-36 rounded-lg px-3 py-1 text-xs font-semibold transition focus:outline-none" style="border:1px solid rgba(239,68,68,0.25);background:rgba(239,68,68,0.08);color:#f87171">
+                                        class="ml-auto w-36 rounded-lg px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-1 focus:ring-red-400/40" style="border:1px solid rgba(239,68,68,0.25);background:rgba(239,68,68,0.08);color:#f87171">
 
                                 </div>
 
@@ -2068,7 +2087,7 @@
 
 <!-- Loading overlay -->
 
-<div id="loading-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:radial-gradient(ellipse at center,rgba(2,6,23,0.92),rgba(2,6,23,0.97));backdrop-filter:blur(12px)">
+<div id="loading-overlay" role="status" aria-live="polite" aria-label="Analysing AWR reports" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:radial-gradient(ellipse at center,rgba(2,6,23,0.92),rgba(2,6,23,0.97));backdrop-filter:blur(12px)">
 
     <!-- Ambient particles -->
     <div class="loading-particles" id="loading-particles"></div>
@@ -3060,28 +3079,38 @@ function buildAWRContext(data) {
     const sqlAttrib = [];
     sql2arr.filter(s => sql1ids.has(s.sql_id)).forEach(s2x => {
         const s1x = sqlMap1[s2x.sql_id];
-        const epe2 = (s2x.elapsed_time_secs || 0) / Math.max(s2x.executions || 1, 1);
-        const epe1 = (s1x.elapsed_time_secs || 0) / Math.max(s1x.executions || 1, 1);
+        const execBad = s2x.executions || 0;
+        const execGood = s1x.executions || 0;
+        if (execBad <= 0 || execGood <= 0) return;
+        const epe2 = (s2x.elapsed_time_secs || 0) / execBad;
+        const epe1 = (s1x.elapsed_time_secs || 0) / execGood;
         if (epe2 > epe1) sqlAttrib.push({
-            id: s2x.sql_id, addlSecs: (epe2 - epe1) * (s2x.executions || 0), type: 'regression',
+            id: s2x.sql_id, addlSecs: (epe2 - epe1) * execBad, type: 'regression',
             planChg: !!(s1x.plan_hash_value && s2x.plan_hash_value && s1x.plan_hash_value !== s2x.plan_hash_value),
-            pctDb: s2x.pct_db_time || 0, epe1, epe2, execs: s2x.executions || 0,
+            pctDb: s2x.pct_db_time || 0, epe1, epe2, execs: execBad,
             bufferGets: s2x.buffer_gets || 0, diskReads: s2x.disk_reads || 0,
             bufferGets1: s1x.buffer_gets || 0, diskReads1: s1x.disk_reads || 0,
             cpuPct: (s2x.elapsed_time_secs || 0) > 0 ? ((s2x.cpu_time_secs || 0) / (s2x.elapsed_time_secs || 1) * 100) : 100,
         });
     });
     sql2arr.filter(s => !sql1ids.has(s.sql_id)).forEach(s2x => {
-        const epe2 = (s2x.elapsed_time_secs || 0) / Math.max(s2x.executions || 1, 1);
+        const execBad = s2x.executions || 0;
+        if (execBad <= 0) return;
+        const epe2 = (s2x.elapsed_time_secs || 0) / execBad;
         sqlAttrib.push({
-            id: s2x.sql_id, addlSecs: epe2 * (s2x.executions || 0), type: 'new',
-            planChg: false, pctDb: s2x.pct_db_time || 0, epe1: 0, epe2, execs: s2x.executions || 0,
+            id: s2x.sql_id, addlSecs: epe2 * execBad, type: 'new',
+            planChg: false, pctDb: s2x.pct_db_time || 0, epe1: 0, epe2, execs: execBad,
             bufferGets: s2x.buffer_gets || 0, diskReads: s2x.disk_reads || 0,
             bufferGets1: 0, diskReads1: 0,
             cpuPct: (s2x.elapsed_time_secs || 0) > 0 ? ((s2x.cpu_time_secs || 0) / (s2x.elapsed_time_secs || 1) * 100) : 100,
         });
     });
-    sqlAttrib.sort((a, b) => b.addlSecs - a.addlSecs);
+    sqlAttrib.sort((a, b) => {
+        const d = (b.addlSecs || 0) - (a.addlSecs || 0);
+        if (Math.abs(d) > 0.0001) return d;
+        if (a.type !== b.type) return a.type === 'regression' ? -1 : 1;
+        return (b.execs || 0) - (a.execs || 0);
+    });
 
     const ctx = {
         meta: {
@@ -3771,7 +3800,7 @@ const WAIT_EVENT_CATALOG = {
     avgWaitDiagnosis: {
       anyLevel: 'Avg wait time matters less than TOTAL waits. High count on segment header = freelist contention. High count on data block = INSERT hot spot.',
     },
-    fixQuery: "SELECT o.owner, o.object_name, o.object_type,\n       SUM(s.buffer_busy_waits_delta) buf_busy,\n       SUM(s.logical_reads_delta) logical_reads\nFROM dba_hist_seg_stat s\nJOIN dba_hist_seg_stat_obj o\n  ON s.obj# = o.obj# AND s.dataobj# = o.dataobj# AND s.dbid = o.dbid\nWHERE s.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND s.dbid = (SELECT dbid FROM v$database)\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY buf_busy DESC\nFETCH FIRST 10 ROWS ONLY;",
+    fixQuery: "-- Step 1: Determine contention class first (data block vs segment header vs undo)\nSELECT class, count\nFROM v$waitstat\nWHERE count > 0\nORDER BY count DESC FETCH FIRST 10 ROWS ONLY;\n\n-- Step 2: Identify the hot segment in this AWR window\nSELECT o.owner, o.object_name, o.object_type,\n       SUM(s.buffer_busy_waits_delta) buf_busy,\n       SUM(s.logical_reads_delta) logical_reads\nFROM dba_hist_seg_stat s\nJOIN dba_hist_seg_stat_obj o\n  ON s.obj# = o.obj# AND s.dataobj# = o.dataobj# AND s.dbid = o.dbid\nWHERE s.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND s.dbid = (SELECT dbid FROM v$database)\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY buf_busy DESC\nFETCH FIRST 10 ROWS ONLY;\n\n-- Step 3: For a known hot object, inspect INITRANS/PCTFREE\nSELECT owner, table_name, ini_trans, pct_free\nFROM dba_tables\nWHERE owner = UPPER('[schema]') AND table_name = UPPER('[table_name]')\nUNION ALL\nSELECT owner, table_name, ini_trans, pct_free\nFROM dba_indexes\nWHERE owner = UPPER('[schema]') AND table_name = UPPER('[table_name]');",
     fixExpect: 'Segment with highest buffer_busy_waits_delta in the problem window = hot block. Note: dba_hist_seg_stat captures historical deltas — use for post-incident analysis.',
     fixAction: 'Reduce contention via hash partitioning, reverse-key index, or ASSM freelists.',
   },
@@ -3812,9 +3841,9 @@ const WAIT_EVENT_CATALOG = {
     avgWaitDiagnosis: {
       high_count_low_wait: 'Many short waits = high-frequency hard parse storm. Fix: bind variables, SESSION_CACHED_CURSORS. High count + high avg wait = single heavy parse (complex statistics, many join tables in CBO). Fix: pin plan via SPM to stop re-evaluation, then fix bind variables.',
     },
-    fixQuery: "-- Step 1: Find cursors being compiled most frequently (hot parse targets)\nSELECT sql_id, loads, parse_calls, executions,\n  ROUND(parse_calls/NULLIF(executions,0)*100,1) parse_ratio_pct,\n  version_count, module\nFROM v$sqlarea\nWHERE loads > 5\nORDER BY loads DESC FETCH FIRST 20 ROWS ONLY;\n\n-- Step 2: Check for cursor version explosion (not sharing child cursors)\nSELECT sql_id, version_count, substr(sql_text,1,80) sql_preview\nFROM v$sqlarea WHERE version_count > 20\nORDER BY version_count DESC FETCH FIRST 10 ROWS ONLY;\n\n-- Step 3: Diagnose why child cursors are not merging\nSELECT reason FROM v$sql_shared_cursor\nWHERE sql_id = '&sql_id' AND rownum <= 20;",
-    fixExpect: 'High loads = cursor recompiled frequently (each compile = one exclusive mutex acquisition). High version_count = child cursors not merging (bind mismatch, NLS, optimizer env difference). parse_ratio_pct near 100% = application has zero cursor reuse.',
-    fixAction: 'Primary fix: enforce bind variables in application code (every distinct literal = new cursor = exclusive mutex conflict for all concurrent sessions). Emergency: ALTER SYSTEM SET cursor_sharing=FORCE SCOPE=MEMORY (test in non-prod first — can cause plan regressions on some SQL). Tuning knob: SESSION_CACHED_CURSORS=50 (default 50 in 19c, raise to 100 for high-concurrency OLTP). If version_count is high: query V$SQL_SHARED_CURSOR.REASON for the specific mismatch — BIND_MISMATCH means bind variable type/size varies between calls; OPTIMIZER_MISMATCH means sessions have different optimizer parameters. If a single heavyweight SQL triggers repeated hard parses: pin its plan via DBMS_SPM.LOAD_PLANS_FROM_AWR to prevent CBO re-evaluation on every load.',
+    fixQuery: "-- Step 1: Parse-vs-execute branching (is this parse storm or child-cursor explosion?)\nSELECT sql_id, loads, parse_calls, executions,\n       ROUND(parse_calls/NULLIF(executions,0)*100,1) parse_ratio_pct,\n       version_count, module\nFROM v$sqlarea\nWHERE loads > 5 OR parse_calls > 100\nORDER BY parse_calls DESC FETCH FIRST 20 ROWS ONLY;\n\n-- Step 2: Child cursor reason distribution for the hot SQL\nSELECT reason, COUNT(*) reason_count\nFROM v$sql_shared_cursor\nWHERE sql_id = '&sql_id'\nGROUP BY reason\nORDER BY reason_count DESC FETCH FIRST 20 ROWS ONLY;\n\n-- Step 3: Session-level parse pressure (who is forcing hard parse)\nSELECT s.sid, s.serial#, s.username, s.module, s.sql_id,\n       st.value AS parse_total\nFROM v$session s\nJOIN v$sesstat st ON st.sid = s.sid\nJOIN v$statname sn ON sn.statistic# = st.statistic#\nWHERE sn.name = 'parse count (total)'\nORDER BY st.value DESC FETCH FIRST 15 ROWS ONLY;",
+    fixExpect: 'parse_ratio_pct near 100% with low executions = parse storm. version_count high with shared-cursor reasons = child cursor explosion. reason=BIND_MISMATCH or OPTIMIZER_MISMATCH pinpoints merge failure root cause.',
+    fixAction: 'Branch fix path: if parse storm, enforce bind variables and raise SESSION_CACHED_CURSORS after validation. If version_count explosion, remediate dominant V$SQL_SHARED_CURSOR.REASON (bind datatype mismatch, optimizer env mismatch, NLS mismatch). Use cursor_sharing=FORCE only as emergency and test in non-production first. For a single heavyweight SQL repeatedly reparsed, evaluate SQL Plan Management baseline pinning.',
   },
 
   // -- CONFIGURATION ------------------------------------------------
@@ -3890,6 +3919,186 @@ const WAIT_EVENT_CATALOG = {
     fixExpect: 'SQL spending time on dblink round-trips + active link configuration.',
     fixAction: 'Localize data. Reduce round-trips across DB links.',
   },
+  'SQL*Net message from client': {
+    mechanism: 'Foreground server waiting on client think time or next fetch/request. Usually idle-client time, not a database bottleneck.',
+    waitClass: 'Idle',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['SQL*Net', 'client think time', 'idle session'],
+    fixQuery: "SELECT sid, serial#, username, module, sql_id, state, last_call_et\nFROM v$session\nWHERE event = 'SQL*Net message from client'\nORDER BY last_call_et DESC FETCH FIRST 20 ROWS ONLY;",
+    fixExpect: 'High last_call_et indicates client think time / idle pooling. Treat as workload pacing, not DB-side latency.',
+    fixAction: 'Do not tune Oracle internals for this event alone. Correlate with active non-idle waits before action. Tune app fetch batching or connection pool behavior if needed.',
+  },
+  'SQL*Net message to client': {
+    mechanism: 'Server sending response packets to client. Usually network round-trip or client fetch cadence.',
+    waitClass: 'Network',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['SQL*Net', 'network round-trip'],
+    fixQuery: "SELECT sid, serial#, username, module, sql_id, seconds_in_wait\nFROM v$session\nWHERE event = 'SQL*Net message to client'\nORDER BY seconds_in_wait DESC FETCH FIRST 20 ROWS ONLY;",
+    fixExpect: 'High count with low latency indicates chatty fetch pattern (small arraysize / many round trips).',
+    fixAction: 'Increase fetch array size and reduce round trips at application layer. Validate network latency path between app and DB hosts.',
+  },
+  'enq: ST - space transaction': {
+    mechanism: 'Space transaction enqueue contention in segment space management operations.',
+    waitClass: 'Configuration',
+    diagnosticMetrics: ['block_changes'],
+    addmKeywords: ['Space Management', 'ST Enqueue'],
+    fixQuery: "SELECT o.owner, o.object_name, o.object_type, COUNT(*) ash_samples\nFROM dba_hist_active_sess_history h\nLEFT JOIN dba_objects o ON o.object_id = h.current_obj#\nWHERE h.event = 'enq: ST - space transaction'\n  AND h.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND h.dbid = (SELECT dbid FROM v$database)\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY ash_samples DESC FETCH FIRST 10 ROWS ONLY;",
+    fixExpect: 'Top object identifies where space transaction serialization is occurring.',
+    fixAction: 'Review segment growth pattern and extent allocation behavior. Validate ASSM usage and object-level allocation pressure.',
+  },
+  'enq: RO - fast object reuse': {
+    mechanism: 'Contention while reusing segment/object space quickly under concurrent churn.',
+    waitClass: 'Configuration',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Segment Reuse', 'RO Enqueue'],
+    fixQuery: "SELECT h.sql_id, h.current_obj#, COUNT(*) ash_samples\nFROM dba_hist_active_sess_history h\nWHERE h.event = 'enq: RO - fast object reuse'\n  AND h.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND h.dbid = (SELECT dbid FROM v$database)\nGROUP BY h.sql_id, h.current_obj#\nORDER BY ash_samples DESC FETCH FIRST 10 ROWS ONLY;",
+    fixExpect: 'SQL/object with highest samples identifies fast object reuse hotspot.',
+    fixAction: 'Reduce aggressive create/drop/truncate churn on same objects and review staging design for reuse pressure.',
+  },
+  'control file sequential read': {
+    mechanism: 'Serialized control file read operations.',
+    waitClass: 'System I/O',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Control File'],
+    fixQuery: "SELECT event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event = 'control file sequential read';",
+    fixExpect: 'Elevated avg_ms indicates control file read latency.',
+    fixAction: 'Check control file placement and underlying storage latency. Correlate with backup/checkpoint/log switch activity.',
+  },
+  'control file parallel write': {
+    mechanism: 'Concurrent control file writes, often around checkpoints and log switches.',
+    waitClass: 'System I/O',
+    diagnosticMetrics: ['redo_size'],
+    addmKeywords: ['Control File', 'Checkpoint'],
+    fixQuery: "SELECT event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event = 'control file parallel write';",
+    fixExpect: 'Sustained high avg_ms indicates control file write bottleneck.',
+    fixAction: 'Review control file I/O path and log switch/checkpoint frequency. Separate control file I/O from busy shared volumes where possible.',
+  },
+  'log file switch completion': {
+    mechanism: 'Sessions waiting for redo log switch lifecycle to complete before progressing.',
+    waitClass: 'Commit',
+    diagnosticMetrics: ['redo_size', 'transactions'],
+    addmKeywords: ['Redo Log Switch'],
+    fixQuery: "SELECT TO_CHAR(first_time,'YYYY-MM-DD HH24') hour, COUNT(*) switches\nFROM v$log_history\nWHERE first_time > SYSDATE - 1\nGROUP BY TO_CHAR(first_time,'YYYY-MM-DD HH24')\nORDER BY 1;",
+    fixExpect: 'Frequent switches correlate with switch-completion waits.',
+    fixAction: 'Review redo log group sizing and switch interval targets. Correlate with log file sync/parallel write behavior.',
+  },
+  'gc cr request': {
+    mechanism: 'RAC global cache request for consistent-read block from remote instance.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['logical_reads'],
+    addmKeywords: ['Global Cache', 'RAC'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr request'\nORDER BY time_waited_micro DESC;",
+    fixExpect: 'High waits and avg_ms indicate cross-instance read locality issues.',
+    fixAction: 'Align service/data affinity to reduce remote CR requests and investigate interconnect quality when avg_ms is elevated.',
+  },
+  'gc current grant 2-way': {
+    mechanism: 'RAC transfer of current (modifiable) block between instances.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['block_changes'],
+    addmKeywords: ['Global Cache', 'RAC'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc current grant 2-way'\nORDER BY time_waited_micro DESC;",
+    fixExpect: 'High volume signals cross-instance write sharing on hot objects.',
+    fixAction: 'Reduce cross-instance write ownership flipping through partitioning and workload affinity.',
+  },
+  'gc current block 2-way': {
+    mechanism: 'RAC current block transfer with two-way messaging path.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['block_changes'],
+    addmKeywords: ['Global Cache', 'RAC'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc current block 2-way'\nORDER BY time_waited_micro DESC;",
+    fixExpect: 'Hot block ownership movement across nodes is likely when this event dominates.',
+    fixAction: 'Apply object/service affinity and reduce shared hot-row updates across instances.',
+  },
+  'gc cr grant congested': {
+    mechanism: 'RAC CR grant delayed due to interconnect or global cache service congestion.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['logical_reads'],
+    addmKeywords: ['Global Cache', 'Interconnect Congestion'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr grant congested'\nORDER BY time_waited_micro DESC;",
+    fixExpect: 'Congested variant points to RAC transport/service pressure rather than normal CR shipping.',
+    fixAction: 'Validate interconnect latency, packet drops, and node load symmetry. Address network or RAC service imbalance before SQL-level tuning.',
+  },
+  'gc current block congested': {
+    mechanism: 'RAC current-block transfer delayed by congestion in global cache path.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['block_changes'],
+    addmKeywords: ['Global Cache', 'Interconnect Congestion'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc current block congested'\nORDER BY time_waited_micro DESC;",
+    fixExpect: 'Congested current-block transfers indicate combined write-sharing and transport pressure.',
+    fixAction: 'Reduce cross-instance write chatter and verify RAC interconnect headroom and error-free transport.',
+  },
+  'gc cr block busy': {
+    mechanism: 'Requested CR block is busy or delayed in global cache servicing path.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['logical_reads'],
+    addmKeywords: ['Global Cache', 'Block Busy'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr block busy'\nORDER BY time_waited_micro DESC;",
+    fixExpect: 'High waits indicate hot global-cache blocks and service delay.',
+    fixAction: 'Identify hot segments via AWR segment GC stats and redistribute workload ownership.',
+  },
+  'PX Deq: Execute Reply': {
+    mechanism: 'Parallel execution process waiting for execution reply message from peer/slave.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Parallel Query', 'PX'],
+    fixQuery: "SELECT sid, serial#, event, seconds_in_wait, sql_id, module\nFROM v$session\nWHERE event = 'PX Deq: Execute Reply'\nORDER BY seconds_in_wait DESC FETCH FIRST 20 ROWS ONLY;",
+    fixExpect: 'Persistent waits indicate PX pipeline imbalance or stalled downstream stage.',
+    fixAction: 'Inspect PX plan stages and skew. Rebalance degree and check target stage cardinality.',
+  },
+  'PX Deq: Parse Reply': {
+    mechanism: 'Parallel execution process waiting for parse reply from coordinator/peer.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Parallel Query', 'PX Parse'],
+    fixQuery: "SELECT sid, serial#, event, seconds_in_wait, sql_id, module\nFROM v$session\nWHERE event = 'PX Deq: Parse Reply'\nORDER BY seconds_in_wait DESC FETCH FIRST 20 ROWS ONLY;",
+    fixExpect: 'Frequent parse-reply waits suggest PX parse overhead and cursor churn under parallel workload.',
+    fixAction: 'Reduce repeated hard parse of PX SQL and verify cursor reuse for parallel statements.',
+  },
+  'PX Deq: Table Q Normal': {
+    mechanism: 'Parallel execution table-queue dequeue wait in normal producer-consumer exchange.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Parallel Query', 'Table Queue'],
+    fixQuery: "SELECT sid, serial#, event, seconds_in_wait, sql_id, module\nFROM v$session\nWHERE event = 'PX Deq: Table Q Normal'\nORDER BY seconds_in_wait DESC FETCH FIRST 20 ROWS ONLY;",
+    fixExpect: 'Some presence is normal; top-db-time dominance indicates imbalance between PX producers and consumers.',
+    fixAction: 'Check PX skew and distribution method in execution plan; tune degree and data distribution for balanced flow.',
+  },
+  'library cache load lock': {
+    mechanism: 'Session waiting to load/lock library cache object while another session is loading or pinning it.',
+    waitClass: 'Concurrency',
+    diagnosticMetrics: ['hard_parses'],
+    addmKeywords: ['Library Cache', 'Load Lock'],
+    fixQuery: "SELECT sid, serial#, username, event, seconds_in_wait, sql_id\nFROM v$session\nWHERE event = 'library cache load lock'\nORDER BY seconds_in_wait DESC;",
+    fixExpect: 'Sustained waits indicate parse/load contention on shared pool objects.',
+    fixAction: 'Reduce hard parsing and invalidations; avoid concurrent DDL during peak activity.',
+  },
+  'latch: session allocation': {
+    mechanism: 'Latch contention during session state object allocation.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Latch', 'Session Allocation'],
+    fixQuery: "SELECT name, gets, misses, sleeps,\n       ROUND(sleeps/NULLIF(gets,0)*100,4) sleep_pct\nFROM v$latch\nWHERE name = 'session allocation';",
+    fixExpect: 'High sleep_pct indicates session allocation latch pressure.',
+    fixAction: 'Review connection churn and pooling strategy to reduce rapid session create/destroy patterns.',
+  },
+  'enq: CI - contention': {
+    mechanism: 'Checkpoint-related enqueue contention path in control structures.',
+    waitClass: 'Configuration',
+    diagnosticMetrics: ['redo_size'],
+    addmKeywords: ['Checkpoint', 'CI Enqueue'],
+    fixQuery: "SELECT event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event = 'enq: CI - contention';",
+    fixExpect: 'Elevated waits indicate checkpoint/control serialization pressure.',
+    fixAction: 'Correlate with checkpoint frequency and redo switch behavior; investigate checkpoint tuning and I/O latency.',
+  },
+  'latch: object queue header operation': {
+    mechanism: 'Latch contention on object queue header operations (AQ/internal queue structures).',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['Latch', 'Object Queue'],
+    fixQuery: "SELECT name, gets, misses, sleeps,\n       ROUND(sleeps/NULLIF(gets,0)*100,4) sleep_pct\nFROM v$latch\nWHERE name = 'object queue header operation';",
+    fixExpect: 'High latch sleep percentage indicates queue header contention.',
+    fixAction: 'Review AQ/object queue workload bursts and reduce hotspot enqueue/dequeue concurrency where feasible.',
+  },
 
   // -- OTHER --------------------------------------------------------
   'latch: shared pool': {
@@ -3960,9 +4169,9 @@ const WAIT_EVENT_CATALOG = {
     waitClass: 'Cluster',
     diagnosticMetrics: ['logical_reads'],
     addmKeywords: ['Global Cache', 'Interconnect'],
-    fixQuery: "SELECT b1.inst_id, b1.value cr_blocks_received\nFROM gv$sysstat b1\nWHERE b1.name = 'gc cr blocks received';",
-    fixExpect: 'High CR blocks received = cross-instance read pattern.',
-    fixAction: 'Partition data by instance affinity. Reduce cross-instance queries.',
+    fixQuery: "-- Step 1: Per-instance CR grant pressure\nSELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/1e6,2) wait_s,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event IN ('gc cr grant 2-way','gc cr request','gc cr grant congested')\nORDER BY time_waited_micro DESC;\n\n-- Step 2: Which SQL causes RAC CR shipping in the AWR window\nSELECT h.sql_id, h.inst_id, COUNT(*) ash_samples\nFROM dba_hist_active_sess_history h\nWHERE h.event IN ('gc cr grant 2-way','gc cr request','gc cr grant congested')\n  AND h.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND h.dbid = (SELECT dbid FROM v$database)\nGROUP BY h.sql_id, h.inst_id\nORDER BY ash_samples DESC FETCH FIRST 15 ROWS ONLY;\n\n-- Step 3: Hot objects driving cross-instance CR traffic\nSELECT o.owner, o.object_name, o.object_type,\n       SUM(s.gc_cr_blocks_served_delta) cr_served\nFROM dba_hist_seg_stat s\nJOIN dba_hist_seg_stat_obj o\n  ON s.obj# = o.obj# AND s.dataobj# = o.dataobj# AND s.dbid = o.dbid\nWHERE s.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND s.dbid = (SELECT dbid FROM v$database)\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY cr_served DESC\nFETCH FIRST 10 ROWS ONLY;",
+    fixExpect: 'Top SQL + top objects together identify whether RAC CR traffic is workload placement (service affinity) or hot-object driven. High avg_ms on congested variants indicates interconnect or global cache pressure, not just normal CR shipping.',
+    fixAction: 'Apply instance affinity for hot objects and associated services first. If congested variants dominate, validate interconnect latency and throughput between nodes. For full scans crossing instances, align partitioning and parallel execution locality to reduce cross-instance CR block traffic.',
   },
   'log file sequential read': {
     mechanism: 'Recovery or LGWR reading redo logs — instance recovery, Data Guard, LogMiner',
@@ -4423,16 +4632,6 @@ const WAIT_EVENT_CATALOG = {
     fixExpect: 'overalloc > 0 = PGA target too low. number_passes > 1 = multi-pass sort (very expensive).',
     fixAction: 'Check V$PGA_TARGET_ADVICE overalloc_count and recommended sizing. Identify the SQL with large sorts via V$SQL_WORKAREA (tempseg_size > 0). Review whether sort volume can be reduced via query tuning. Validate available SGA/OS memory before considering PGA parameter changes.',
   },
-  'free buffer waits': {
-    mechanism: 'DBWR bottleneck — session needs a free buffer in the buffer cache but all buffers are dirty. Waits for DBWR to write dirty blocks to disk to free space.',
-    waitClass: 'Configuration',
-    diagnosticMetrics: ['db_block_changes', 'physical_writes', 'buffer_cache_size'],
-    specialRule: 'High free buffer waits + high db_block_changes = DBWR cannot keep up with DML rate. Usually a storage write bottleneck or undersized buffer cache.',
-    addmKeywords: ['free buffer', 'DBWR', 'buffer cache'],
-    fixQuery: "-- DBWR write performance\nSELECT name, value FROM v$sysstat\nWHERE name IN ('physical writes','physical writes direct','DBWR checkpoints','background checkpoints completed');\n\n-- Buffer cache advisory\nSELECT size_for_estimate MB, buffers_for_estimate buffers,\n       estd_physical_read_factor read_factor,\n       estd_physical_reads est_reads\nFROM v$db_cache_advice\nWHERE name = 'DEFAULT' AND advice_status = 'ON'\nORDER BY size_for_estimate;\n\n-- I/O stats by function (DBWR vs others)\nSELECT function_name, small_write_reqs, large_write_reqs,\n       ROUND(small_write_servicetime/NULLIF(small_write_reqs,0), 2) avg_small_ms,\n       ROUND(large_write_servicetime/NULLIF(large_write_reqs,0), 2) avg_large_ms\nFROM v$iostat_function\nWHERE function_name LIKE 'DBWR%' OR function_name = 'Others'\nORDER BY small_write_reqs DESC;",
-    fixExpect: 'avg_small_ms > 10 = slow storage writes. read_factor dropping at higher cache = cache too small. background checkpoints rising = checkpoint frequency too high.',
-    fixAction: 'Check V$DB_CACHE_ADVICE for cache sizing guidance. Review V$FILESTAT avg_write_ms to identify slow datafiles. Validate current DB_WRITER_PROCESSES in V$PARAMETER. Check LOG_CHECKPOINT_INTERVAL and FAST_START_MTTR_TARGET settings. Engage DBA before any parameter adjustments.',
-  },
   'enq: FB - contention': {
     mechanism: 'Format Block enqueue — contention on formatting new blocks in a segment. Occurs during segment space management when multiple sessions extend or format blocks simultaneously.',
     waitClass: 'Application',
@@ -4442,34 +4641,35 @@ const WAIT_EVENT_CATALOG = {
     fixExpect: 'Top object by waits = the segment being extended. MSSM tablespaces are more prone to FB contention.',
     fixAction: 'Confirm the extending segment via ASH (current_obj#). Check tablespace segment_space_management (ASSM vs MSSM). Review current NEXT extent size. Engage DBA to evaluate extent pre-allocation and tablespace configuration before any structural changes.',
   },
-  'enq: US - contention': {
-    mechanism: 'Undo Segment enqueue — contention accessing undo/rollback segments. Sessions compete for undo segment header blocks.',
-    waitClass: 'Application',
-    diagnosticMetrics: ['undo_usage', 'rollback_segments'],
-    addmKeywords: ['undo', 'rollback', 'US enqueue'],
-    fixQuery: "-- Undo segment usage\nSELECT usn, writes, gets, waits,\n       ROUND(waits/NULLIF(gets,0)*100, 2) pct_waits,\n       shrinks, extends\nFROM v$rollstat\nORDER BY waits DESC;\n\n-- Undo tablespace sizing\nSELECT tablespace_name, ROUND(SUM(bytes)/1024/1024) mb_used,\n       COUNT(*) segments\nFROM dba_undo_extents\nWHERE status = 'ACTIVE'\nGROUP BY tablespace_name;",
-    fixExpect: 'High pct_waits on specific USN = too few undo segments. Many extends/shrinks = undersized.',
-    fixAction: 'Check V$UNDOSTAT expiredblks, unexpiredblks, and txncount. Review undo tablespace free space via DBA_FREE_SPACE. Verify UNDO_MANAGEMENT=AUTO and AUTOEXTEND status. Engage DBA before any undo tablespace configuration changes.',
-  },
-  'latch: redo copy': {
-    mechanism: 'Redo copy latch — concurrency on writing redo entries to the log buffer. Multiple sessions generating redo simultaneously contend for redo copy latches.',
-    waitClass: 'Configuration',
-    diagnosticMetrics: ['redo_size', 'redo_entries'],
-    addmKeywords: ['redo', 'latch', 'log buffer'],
-    fixQuery: "-- Redo generation rate and latch stats\nSELECT name, gets, misses, sleeps,\n       ROUND(misses/NULLIF(gets,0)*100, 2) miss_pct\nFROM v$latch\nWHERE name LIKE 'redo%'\nORDER BY misses DESC;\n\n-- Redo size per second\nSELECT ROUND(value/1024/1024, 2) redo_mb\nFROM v$sysstat WHERE name = 'redo size';",
-    fixExpect: 'miss_pct > 1% = contention. High redo_mb = heavy DML rate.',
-    fixAction: 'Reduce redo generation: batch DML, use NOLOGGING for bulk inserts where safe. Check current log_buffer value in V$PARAMETER and redo copy latch sleep percentage. Oracle 12c+ auto-tunes redo copy latches — verify private redo strands are active.',
-  },
-  'latch: redo allocation': {
-    mechanism: 'Redo allocation latch — serialization point for allocating space in the redo log buffer. Bottleneck when many sessions generate redo concurrently.',
-    waitClass: 'Concurrency',
-    diagnosticMetrics: ['redo_size', 'redo_entries'],
-    addmKeywords: ['redo allocation', 'latch'],
-    fixQuery: "-- Redo allocation latch contention\nSELECT name, gets, misses, sleeps, spin_gets,\n       ROUND(misses/NULLIF(gets,0)*100, 4) miss_pct\nFROM v$latch WHERE name = 'redo allocation';\n\n-- Log buffer space waits (related)\nSELECT event, total_waits, time_waited_micro,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000, 2) avg_ms\nFROM v$system_event\nWHERE event IN ('log buffer space','redo writing');",
-    fixExpect: 'miss_pct > 0.1% = contention. High spin_gets = CPU burnt spinning on latch.',
-    fixAction: 'Verify private redo strands are enabled (12c+: check _LOG_PRIVATE_PARALLELISM_MUL). Check current log_buffer size in V$PARAMETER and redo buffer allocation retries in V$SYSSTAT. Reduce redo generation rate in application code.',
-  },
 };
+
+function _warnDuplicateWaitCatalogKeysFromSource() {
+  try {
+    const src = document.documentElement?.textContent || '';
+    const anchor = src.indexOf('const WAIT_EVENT_CATALOG = {');
+    if (anchor < 0) return;
+    const tail = src.slice(anchor);
+    const end = tail.indexOf('\n};');
+    if (end < 0) return;
+    const block = tail.slice(0, end);
+    const keyRe = /^\s*'([^']+)'\s*:\s*\{/gm;
+    const seen = new Set();
+    const dupes = new Set();
+    let m;
+    while ((m = keyRe.exec(block)) !== null) {
+      const k = (m[1] || '').toLowerCase();
+      if (seen.has(k)) dupes.add(k);
+      else seen.add(k);
+    }
+    if (dupes.size) {
+      console.warn('[WAIT_EVENT_CATALOG] Duplicate keys detected in source:', Array.from(dupes).sort());
+    }
+  } catch (_) {
+    // Keep diagnostics non-blocking.
+  }
+}
+
+_warnDuplicateWaitCatalogKeysFromSource();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WAIT EVENT DIAGNOSTIC ENGINE
@@ -6807,16 +7007,17 @@ function _scoreCategories(ctx, opts) {
     const dbCpuPct      = dbCpuBadSecs / Math.max(dbTimeBadSecs, 0.001) * 100;
 
     // Safe % change (avoids divide-by-zero inflation).
-    // When baseline ≈ 0 and problem > 0, cap at 200 (not 999) so that scoring
-    // formulas and tie-breakers are not distorted by an unbounded sentinel.
-    const _pct = (g, b) => g > 0.001 ? (b - g) / g * 100 : (b > 0 ? 200 : 0);
-    const logonsDelta    = _pct(logonsGood, logonsBad);
-    const hardParseDelta = _pct(hardParseGood, hardParseBad);
-    const execsDelta     = _pct(execsGood, execsBad);
-    const physReadsDelta = _pct(physReadsGood, physReadsBad);
+    // When baseline ≈ 0 and problem > 0, return null to represent "no baseline"
+    // instead of injecting an artificial 200% growth signal.
+    const _pct = (g, b) => g > 0.001 ? (b - g) / g * 100 : (b > 0 ? null : 0);
+    const _asNum = (v) => v == null ? 0 : v;
+    const logonsDelta    = _asNum(_pct(logonsGood, logonsBad));
+    const hardParseDelta = _asNum(_pct(hardParseGood, hardParseBad));
+    const execsDelta     = _asNum(_pct(execsGood, execsBad));
+    const physReadsDelta = _asNum(_pct(physReadsGood, physReadsBad));
     const txGoodE = ctx.loadProfile?.good?.transactions || 0;
     const txBadE  = ctx.loadProfile?.bad?.transactions  || 0;
-    const txDeltaE = _pct(txGoodE, txBadE);
+    const txDeltaE = _asNum(_pct(txGoodE, txBadE));
 
     // Wait event aggregation helpers
     const _waitPct = (pat) => badWaits
@@ -6826,7 +7027,10 @@ function _scoreCategories(ctx, opts) {
         .filter(w => new RegExp(pat,'i').test(w.event_name||''))
         .reduce((s,w) => s+(w.pct_db_time||0), 0);
     const logFileSyncPct      = _waitPct('log file sync');
-    const concurrencyTotalPct = _waitPct('latch|buffer busy|enq:|gc |mutex|cursor.*pin');
+    const latchTotalPct       = _waitPct('latch|buffer busy waits|mutex|cursor.*pin');
+    const lockTotalPct        = _waitPct('enq: TX|enq: TM');
+    const gcTotalPct          = _waitPct('^gc |gc cr |gc current|gc buffer busy');
+    const concurrencyTotalPct = latchTotalPct + lockTotalPct + Math.min(gcTotalPct, 3);
     const ioTotalPct          = _waitPct('db file|direct path|cell.*smart|rman');
     const connMgmtBadPct      = _waitPct('connection management|logon storm');
     const connMgmtGoodPct     = goodWaits
@@ -6911,11 +7115,12 @@ function _scoreCategories(ctx, opts) {
 
     // 4. SQL_REGRESSION — per-exec >= 20% worse, same plan
     const _regRatio = (topCulprit?.epeBad||0) / Math.max(topCulprit?.epeGood||0.001, 0.001);
-    if (isExecReg && (topCulprit?.epeGood||0) > 0 && _regRatio > 1.2 && !isPlanChg) {
+    const _regAddlSecs = topCulprit?.addlSecs || 0;
+    if (isExecReg && (topCulprit?.epeGood||0) > 0 && _regRatio > 1.2 && !isPlanChg && _regAddlSecs >= 30) {
         // FIX: Boost score for dominant regressing SQL
         scores.SQL_REGRESSION = isDominant ? Math.min(100, 50 + topPctDb * 0.5 + (_regRatio-1)*30) : 40 + Math.min(40, (_regRatio-1)*100);
-        scoreReasons.SQL_REGRESSION = `SQL ${topSqlId}: ${((_regRatio-1)*100).toFixed(0)}% worse elapsed/exec, plan unchanged${isDominant?' — DOMINANT':''}`;
-    } else { scores.SQL_REGRESSION = 0; scoreReasons.SQL_REGRESSION = `No exec regression evidence (ratio ${_regRatio.toFixed(2)})`; }
+        scoreReasons.SQL_REGRESSION = `SQL ${topSqlId}: ${((_regRatio-1)*100).toFixed(0)}% worse elapsed/exec, +${_regAddlSecs.toFixed(1)}s added DB time, plan unchanged${isDominant?' — DOMINANT':''}`;
+    } else { scores.SQL_REGRESSION = 0; scoreReasons.SQL_REGRESSION = `No exec regression evidence (ratio ${_regRatio.toFixed(2)}, added time ${_regAddlSecs.toFixed(1)}s; requires ≥30s)`; }
 
     // 5. CPU_SATURATION
     // FIX: AAS/CPUs < 0.5 = cannot be CPU saturation regardless of CPU% in DB Time.
@@ -6926,28 +7131,30 @@ function _scoreCategories(ctx, opts) {
     if (_aasRatioCpu < 0.5) {
         scores.CPU_SATURATION = 0;
         scoreReasons.CPU_SATURATION = `AAS/CPUs ${_aasRatioCpu.toFixed(2)} < 0.5 — insufficient demand for saturation regardless of CPU% (${dbCpuPct.toFixed(0)}%)`;
-    } else if (dbCpuPct > _cpuThresh && _aasRatioCpu >= 1.0 && hardParseDelta < 50) {
-        // T4: Require AAS to actually exceed CPU count (ratio >= 1.0), not just 80%.
-        // High CPU% with AAS below CPU count = CPU-efficient small workload, not saturation.
-        scores.CPU_SATURATION = 40 + dbCpuPct * 0.4;
-        scoreReasons.CPU_SATURATION = `DB CPU ${dbCpuPct.toFixed(0)}% DB Time (threshold: ${_cpuThresh.toFixed(0)}%), AAS/CPU=${_aasRatioCpu.toFixed(2)} (≥1.0 = AAS exceeds CPU count)`;
-    } else if (dbCpuPct > _cpuThresh && _aasRatioCpu >= 0.5) {
-        // AAS approaching but not exceeding CPU count: session queue could be forming but
-        // not confirmed CPU saturation. Score low — use as contributing signal only.
-        scores.CPU_SATURATION = Math.min(25, dbCpuPct * 0.3);
-        scoreReasons.CPU_SATURATION = `DB CPU ${dbCpuPct.toFixed(0)}% DB Time but AAS/CPU ${_aasRatioCpu.toFixed(2)} < 1.0 — AAS does not exceed CPU count, not confirmed saturation`;
+    } else if (_aasRatioCpu >= 1.0) {
+        // AAS/CPU is the primary saturation gate; DB CPU% is corroborative.
+        if (dbCpuPct > _cpuThresh && hardParseDelta < 50) {
+            scores.CPU_SATURATION = 40 + dbCpuPct * 0.4;
+            scoreReasons.CPU_SATURATION = `AAS/CPU=${_aasRatioCpu.toFixed(2)} (≥1.0), DB CPU ${dbCpuPct.toFixed(0)}% DB Time (threshold: ${_cpuThresh.toFixed(0)}%)`;
+        } else {
+            scores.CPU_SATURATION = 0;
+            scoreReasons.CPU_SATURATION = `AAS/CPU ${_aasRatioCpu.toFixed(2)} is high but DB CPU share ${dbCpuPct.toFixed(0)}% is below threshold ${_cpuThresh.toFixed(0)}% or parsing noise is high`;
+        }
+    } else if (_aasRatioCpu >= 0.5 && dbCpuPct > _cpuThresh) {
+        scores.CPU_SATURATION = Math.min(20, 8 + dbCpuPct * 0.2);
+        scoreReasons.CPU_SATURATION = `DB CPU ${dbCpuPct.toFixed(0)}% is high but AAS/CPU ${_aasRatioCpu.toFixed(2)} < 1.0 — possible pressure, not confirmed saturation`;
     } else { scores.CPU_SATURATION = 0; scoreReasons.CPU_SATURATION = `DB CPU ${dbCpuPct.toFixed(0)}% (threshold: ${_cpuThresh.toFixed(0)}%), AAS/CPU ${_aasRatioCpu.toFixed(2)} — thresholds not met`; }
 
     // 6. IO_BOTTLENECK — score capped at 100, compound with buffer hit degradation
     const _bufHitGood = ctx.instanceEfficiency?.good?.buffer_cache_hit_pct || 0;
     const _bufHitBad = ctx.instanceEfficiency?.bad?.buffer_cache_hit_pct || 0;
     const _bufHitDrop = _bufHitGood - _bufHitBad; // positive = degradation
-    const _ioCompound = ioTotalPct >= 5 && (physReadsDelta > 30 || _bufHitDrop > 3);
+    const _ioCompound = ioTotalPct >= 5 && (physReadsDelta > 30 || (_bufHitDrop > 3 && _bufHitBad < 95));
     if (_ioCompound) {
-        const _bufBoost = _bufHitDrop > 3 ? Math.min(15, _bufHitDrop * 3) : 0;
+        const _bufBoost = (_bufHitDrop > 3 && _bufHitBad < 95) ? Math.min(15, _bufHitDrop * 3) : 0;
         scores.IO_BOTTLENECK = Math.min(100, 30 + ioTotalPct + Math.min(20, physReadsDelta * 0.1) + _bufBoost);
-        scoreReasons.IO_BOTTLENECK = `I/O waits ${ioTotalPct.toFixed(1)}% DB Time, physReads +${physReadsDelta.toFixed(0)}%${_bufHitDrop>3?', buffer hit '+_bufHitGood.toFixed(1)+'%→'+_bufHitBad.toFixed(1)+'% (−'+_bufHitDrop.toFixed(1)+'pp)':''}`;
-    } else { scores.IO_BOTTLENECK = 0; scoreReasons.IO_BOTTLENECK = `I/O waits ${ioTotalPct.toFixed(1)}% (≥5%), physReads Δ${physReadsDelta.toFixed(0)}% (>30%), bufHitΔ ${_bufHitDrop.toFixed(1)}pp (>3pp) — none met`; }
+        scoreReasons.IO_BOTTLENECK = `I/O waits ${ioTotalPct.toFixed(1)}% DB Time, physReads +${physReadsDelta.toFixed(0)}%${(_bufHitDrop>3&&_bufHitBad<95)?', buffer hit '+_bufHitGood.toFixed(1)+'%→'+_bufHitBad.toFixed(1)+'% (−'+_bufHitDrop.toFixed(1)+'pp)':''}`;
+    } else { scores.IO_BOTTLENECK = 0; scoreReasons.IO_BOTTLENECK = `I/O waits ${ioTotalPct.toFixed(1)}% (≥5%), physReads Δ${physReadsDelta.toFixed(0)}% (>30%), bufHit bad ${_bufHitBad.toFixed(1)}% (<95 with >3pp drop) — none met`; }
 
     // 6b. BUFFER_WRITE_PRESSURE — free buffer waits ≥ threshold in bad period.
     // Fires on BOTH regression (delta ≥ 5pp) AND chronic (absolute ≥ 15% regardless of delta).
@@ -6977,7 +7184,7 @@ function _scoreCategories(ctx, opts) {
 
     // 7. COMMIT_LOGGING
     if (logFileSyncPct >= 3) {
-        scores.COMMIT_LOGGING = 30 + logFileSyncPct * 2;
+        scores.COMMIT_LOGGING = Math.min(100, 30 + logFileSyncPct * 2 + Math.max(0, (logFileSyncPct - 10) * 3));
         scoreReasons.COMMIT_LOGGING = `log file sync: ${logFileSyncPct.toFixed(1)}% DB Time`;
     } else { scores.COMMIT_LOGGING = 0; scoreReasons.COMMIT_LOGGING = `log file sync ${logFileSyncPct.toFixed(1)}% (threshold =3%)`; }
 
@@ -6995,11 +7202,11 @@ function _scoreCategories(ctx, opts) {
 
     // 9. CONCURRENCY — 5% hard floor for PRIMARY verdict, but detect micro-contention as contributing
     // Per-latch analysis: single latch >0.5% with >2× delta is micro-contention (actionable but not primary)
-    const _topLatchEvt = badWaits.filter(w=>/latch|buffer busy|enq:|mutex|cursor.*pin/i.test(w.event_name||'')).sort((a,b)=>(b.pct_db_time||0)-(a.pct_db_time||0))[0];
+    const _topLatchEvt = badWaits.filter(w=>/latch|buffer busy|enq: (TX|TM)|mutex|cursor.*pin/i.test(w.event_name||'')).sort((a,b)=>(b.pct_db_time||0)-(a.pct_db_time||0))[0];
     const _topLatchPctVal = _topLatchEvt?.pct_db_time || 0;
     if (concurrencyTotalPct >= 5) {
         scores.CONCURRENCY = 25 + concurrencyTotalPct * 2;
-        scoreReasons.CONCURRENCY = `Total concurrency waits: ${concurrencyTotalPct.toFixed(1)}% DB Time`;
+        scoreReasons.CONCURRENCY = `Concurrency waits ${concurrencyTotalPct.toFixed(1)}% DB Time (latch/mutex ${latchTotalPct.toFixed(1)}%, lock ${lockTotalPct.toFixed(1)}%, RAC GC ${gcTotalPct.toFixed(1)}%)`;
     } else if (_topLatchPctVal >= 1.0) {
         // Micro-contention: single event ≥1% but aggregate <5% — score as contributing, not primary
         scores.CONCURRENCY = Math.min(20, 10 + _topLatchPctVal * 5);
@@ -7007,6 +7214,40 @@ function _scoreCategories(ctx, opts) {
     } else {
         scores.CONCURRENCY = 0;
         scoreReasons.CONCURRENCY = `Total concurrency/latch ${concurrencyTotalPct.toFixed(2)}% DB Time — BELOW 5% hard minimum, top event ${_topLatchPctVal.toFixed(2)}% — noise.`;
+    }
+
+    // Fix 11: pre-verdict segment dominance. A single segment owning a large share of
+    // row-lock or buffer-busy waits is an object-level concurrency signal even when the
+    // aggregate wait% sits just under the 5% floor (e.g. a hot table with a negative
+    // DB-Time delta but 50% of all row-lock waits). Feed it into CONCURRENCY scoring so
+    // the verdict sees what the segment panel sees, closing the segment↔verdict gap.
+    {
+        const _segAllBad = ctx.segments?._allBad || [];
+        const _sumRowLock = _segAllBad.reduce((s,x)=>s+(x.row_lock_waits||0),0);
+        const _sumBufBusy = _segAllBad.reduce((s,x)=>s+(x.buffer_busy_waits||0),0);
+        let _segDom = null;
+        if (_sumRowLock > 0) {
+            const _t = _segAllBad.slice().sort((a,b)=>(b.row_lock_waits||0)-(a.row_lock_waits||0))[0];
+            const _p = (_t?.row_lock_waits||0) / _sumRowLock * 100;
+            if (_p >= 30) _segDom = { type:'ROW_LOCK', name:_t.object_name||'segment', pct:_p };
+        }
+        if (!_segDom && _sumBufBusy > 0) {
+            const _t = _segAllBad.slice().sort((a,b)=>(b.buffer_busy_waits||0)-(a.buffer_busy_waits||0))[0];
+            const _p = (_t?.buffer_busy_waits||0) / _sumBufBusy * 100;
+            if (_p >= 30) _segDom = { type:'BUFFER_BUSY', name:_t.object_name||'segment', pct:_p };
+        }
+        if (_segDom) {
+            // Only boost when the matching wait class has real DB-time presence — a dominant
+            // share of a negligible total is not a verdict-grade signal.
+            const _segWaitPct = _segDom.type === 'ROW_LOCK'
+                ? _waitPct('enq: TX|enq: TM|row lock')
+                : _waitPct('buffer busy');
+            if (_segWaitPct >= 1) {
+                scores.CONCURRENCY = Math.min(100, (scores.CONCURRENCY || 0) + 15);
+                scoreReasons.CONCURRENCY = (scoreReasons.CONCURRENCY ? scoreReasons.CONCURRENCY + ' ' : '')
+                    + `Segment ${_segDom.name} owns ${_segDom.pct.toFixed(0)}% of ${_segDom.type === 'ROW_LOCK' ? 'row-lock' : 'buffer-busy'} waits (${_segWaitPct.toFixed(1)}% DB Time) — concentrated object-level contention (+15).`;
+            }
+        }
     }
 
     // 10. LOGON_STORM
@@ -7268,10 +7509,16 @@ function _selectWinner(guarded, ctx) {
         const isDQ = !!disqualified[cat];
         consideredCategories.push({ category:cat, score, reason:scoreReasons[cat]||'', disqualified:isDQ, disqualifyReason:disqualifyReasons[cat]||null });
         if (!isDQ && score > 0 && !winner) { winner = cat; winnerScore = score; }
-        else if (!isDQ && score > 0 && winner && (score - winnerScore) > 15) {
-            // Higher score wins if gap > 15 points — positional priority
-            // only applies to near-ties (within 15 points)
-            winner = cat; winnerScore = score;
+        else if (!isDQ && score > 0 && winner) {
+            const _sqlVerdicts = new Set(['DOMINANT_SQL','NEW_SQL','PLAN_CHANGE','SQL_REGRESSION']);
+            const _infraVerdicts = new Set(['CPU_SATURATION','IO_BOTTLENECK','BUFFER_WRITE_PRESSURE','COMMIT_LOGGING','WORKLOAD_GROWTH','CONCURRENCY','LOGON_STORM','PGA_PRESSURE']);
+            const _scoreGap = score - winnerScore;
+            const _sqlToInfraOverride = _sqlVerdicts.has(winner) && _infraVerdicts.has(cat) && score >= 80 && topPctDb < 30 && _scoreGap >= 8;
+            const _generalOverride = _scoreGap > 20;
+            if (_sqlToInfraOverride || _generalOverride) {
+                winner = cat;
+                winnerScore = score;
+            }
         }
     }
     let primaryVerdict = winner || 'INCONCLUSIVE';
@@ -7577,7 +7824,7 @@ function _buildConfidence(ctx, winner) {
         ? 70  // High confidence when all signals agree on "nothing wrong"
         : Math.round(
             (isDominant?35:isSignificant?15:0) +
-            (addmConfirmed?20:0) +
+            (addmConfirmed?8:0) +
             (assertionsFailed.length===0?15:Math.max(0,15-assertionsFailed.length*3)) +
             (winnerScore>70?20:winnerScore>40?10:5) +
             (isParallel&&parallelSignals.length>=2?10:0)
@@ -7706,7 +7953,14 @@ function buildDataDrivenVerdict(ctx) {
         const isNew = !good;
         const epeGood = good ? good.perExec : 0;
         const epeBad = bad.perExec;
+        // Fix 1: AWR reports executions=0 for PL/SQL child cursors whose elapsed time
+        // belongs to the parent call. The registry floors executions to 1 for safe
+        // per-exec division, so the floored count can never be 0 here — guard on the RAW
+        // count instead. A raw 0 means epeBad = elapsed/1 would masquerade as a huge
+        // per-exec SQL and win the verdict; drop the candidate entirely.
+        const _execsBadRaw = (bad.executionsRaw != null) ? bad.executionsRaw : (bad.executions || 0);
         const execsBad = bad.executions || 0;
+        if (_execsBadRaw <= 0) continue;
         const addlSecs = isNew ? (epeBad * execsBad) : ((epeBad - epeGood) * execsBad);
         const pctDb = bad.pctDbTime || 0;
         // Impact-based gate: skip truly negligible SQL (no measurable impact)
@@ -7753,7 +8007,12 @@ function buildDataDrivenVerdict(ctx) {
     // Negatives (improving SQLs) are separated so they never outrank problem SQL.
     const _improvedSQL = culpritCandidates.filter(c => c.addlSecs < 0);
     const _problemSQL  = culpritCandidates.filter(c => c.addlSecs >= 0);
-    _problemSQL.sort((a, b) => b.addlSecs - a.addlSecs);
+    _problemSQL.sort((a, b) => {
+        const d = (b.addlSecs || 0) - (a.addlSecs || 0);
+        if (Math.abs(d) > 0.0001) return d;
+        if (!!a.isNew !== !!b.isNew) return a.isNew ? 1 : -1;
+        return (b.execsBad || 0) - (a.execsBad || 0);
+    });
     _improvedSQL.sort((a, b) => a.addlSecs - b.addlSecs); // most improved first (largest negative)
     culpritCandidates.length = 0;
     culpritCandidates.push(..._problemSQL, ..._improvedSQL);
@@ -8859,6 +9118,7 @@ function buildSQLRegistry(d1, d2, goodReg, badReg) {
             goodEntry: g ? {
                 perExec: gElapsed / gExecs,
                 executions: gExecs,
+                executionsRaw: (g.executions || 0),
                 elapsed: gElapsed,
                 cpuPct: gElapsed > 0 ? (gCpu / gElapsed * 100) : 100,
                 pctDbTime: g.pct_db_time || 0,
@@ -8878,6 +9138,7 @@ function buildSQLRegistry(d1, d2, goodReg, badReg) {
             badEntry: b ? {
                 perExec: bElapsed / bExecs,
                 executions: bExecs,
+                executionsRaw: (b.executions || 0),
                 elapsed: bElapsed,
                 cpuPct: bElapsed > 0 ? (bCpu / bElapsed * 100) : 100,
                 pctDbTime: b.pct_db_time || 0,
@@ -9120,9 +9381,18 @@ function switchTab(tab) {
 
     document.getElementById('tab-' + tab)?.classList.remove('hidden');
 
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => {
+        b.classList.remove('active');
+        b.removeAttribute('aria-current');
+    });
 
-    document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+    const activeBtn = document.querySelector(`[data-tab="${tab}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.setAttribute('aria-current', 'page');
+        const label = activeBtn.dataset.label || 'OraVision AWR Tool';
+        document.title = 'OraVision — ' + label;
+    }
 
 }
 
@@ -9609,7 +9879,7 @@ async function uploadCompare() {
     // Client-side file guards (mirrors server validation)
     for (const [file, label] of [[f1.files[0],'Baseline'],[f2.files[0],'Problem']]) {
         if (!/\.(html?|htm)$/i.test(file.name)) { alert(label+': Only .html files are supported'); return; }
-        if (file.size > 80*1024*1024) { alert(label+': File too large (max 80 MB)'); return; }
+        if (file.size > 50*1024*1024) { alert(label+': File too large (max 50 MB — AWR HTML reports are typically under 10 MB)'); return; }
         if (file.size < 1024) { alert(label+': File appears empty — select a valid AWR HTML report'); return; }
     }
 
@@ -9679,7 +9949,7 @@ async function uploadCompare() {
             isNetwork ? 'Network error — server did not respond' : e.message,
             isNetwork ? null : e.stack,
             isNetwork
-                ? 'The server may have crashed processing a very large file. Check that the server is running at http://localhost:8000 and try again.'
+                ? `The server may have crashed processing a very large file. Check that the server is running at ${window.location.origin} and try again.`
                 : 'See browser console (F12) for the full stack trace.'
         );
         console.error('uploadCompare FULL ERROR:', e, e.stack);
@@ -20637,8 +20907,22 @@ function _buildContributingVerdictHtml(cv) {
 
 function generateComparisonVerdictNarrative(ctx, wkPatterns, sreConn) {
     // T2 FIX: Guard — one analysis = one verdict card. Prevent duplicate rendering.
-    if (generateComparisonVerdictNarrative._rendered && generateComparisonVerdictNarrative._cachedResult) {
-        console.warn('[OraVision] generateComparisonVerdictNarrative called more than once — returning cached result');
+    // Data-aware cache: build a signature of the loaded comparison so the cache
+    // AUTO-INVALIDATES when a new AWR pair is analysed — even if an entry path forgot
+    // to clear the guard. This prevents showing the PREVIOUS upload's verdict after a
+    // fresh pair of AWRs is loaded without a page refresh.
+    const _vsig = [
+        ctx?.meta?.good?.snap_date, ctx?.meta?.bad?.snap_date,
+        ctx?.meta?.good?.db_time_secs, ctx?.meta?.bad?.db_time_secs,
+        ctx?.meta?.good?.elapsed_min, ctx?.meta?.bad?.elapsed_min,
+        ctx?.meta?.cpu_count, ctx?.meta?.lbl1, ctx?.meta?.lbl2,
+        (ctx?.waitEvents?.bad || [])[0]?.event_name,
+        (ctx?.sqlAttribution || [])[0]?.sqlId
+    ].map(x => (x == null ? '' : String(x))).join('|');
+    if (generateComparisonVerdictNarrative._rendered
+        && generateComparisonVerdictNarrative._cachedResult
+        && generateComparisonVerdictNarrative._cachedSig === _vsig) {
+        console.warn('[OraVision] generateComparisonVerdictNarrative called more than once for the same data — returning cached result');
         return generateComparisonVerdictNarrative._cachedResult;
     }
     // Only lock after successful completion (set at bottom of function)
@@ -22991,7 +23275,11 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         _finalPv === 'HW_ENQUEUE_CONTENTION' || _finalPv === 'BUFFER_WRITE_PRESSURE';
     if (topWaitPct > 20 && _topWaitFitsVerdict)             _confSignals.push('Wait event dominance');
     if (domSqlShare > 15 && _sqlFitsVerdict)               _confSignals.push('SQL attribution');
-    if (_lpCrit.filter(c => c.d > 0).length > 0)           _confSignals.push('Load profile shift');
+    // Gap H: a per-second load-profile increase is genuine corroboration only when the
+    // AAS-normalised load did not fall. If the problem period is materially lighter per
+    // elapsed second (_aasLess), a higher rate on one metric is not workload growth, so
+    // it must not inflate confidence (matches the AAS-normalisation guard above).
+    if (_lpCrit.filter(c => c.d > 0).length > 0 && !_aasLess) _confSignals.push('Load profile shift');
     if (_ieCrit.length > 0)                                _confSignals.push('Efficiency degradation');
     if (addmCtx.length > 0)                                _confSignals.push('ADDM corroboration');
     if (aas2 > 0 && cpus > 0 && aas2 > cpus * 0.9)        _confSignals.push('AAS at/near saturation');
@@ -23001,7 +23289,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
     const _segEv = ctx.verdict?.segEvidence;
     const _segPanel = ctx._panelInsights?.segments;
     const _segCorroborates = _segEv?.segCorroborates
-        || (_segPanel?.critical > 0 && _segPanel?.rcaLinked?.length > 0)
+        || (_segPanel?.critical > 0 && _segPanel?.rcaLinked?.some(s => !s.isSecondarySymptom))
         || (_segEv?.additionalSegments?.some(s => s.matchesSql || s.hasContention));
     if (_segCorroborates)                                  _confSignals.push('Segment corroboration');
 
@@ -23038,6 +23326,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
     if (topWaitPct < 20)       _missingProof.push({ txt:`Wait event dominance absent (top event only ${f1(topWaitPct)}% DB Time) — no single wait class dominates decisively`, link:'ASH: filter by wait_class to find distributed waits' });
     if (domSqlShare < 10)      _missingProof.push({ txt:`SQL attribution weak (top SQL ${f1(domSqlShare)}% DB Time) — distributed load, no single statement to tune`, link:'SQL tab: check buffer gets and elapsed across all statements' });
     if (!_lpCrit.filter(c=>c.d>0).length) _missingProof.push({ txt:'No load profile volume surge — workload input may be structurally identical between periods', link:'Check job scheduler, connection pool size, batch overlap' });
+    if (_aasLess && _lpCrit.filter(c=>c.d>0).length) _missingProof.push({ txt:`Load profile shift discounted — AAS-normalised load is ${Math.abs(_aasNormDelta).toFixed(0)}% lighter in the problem period, so higher per-second rates on individual metrics do not indicate workload growth`, link:'Compare AAS (DB Time \u00F7 elapsed seconds) between periods rather than raw totals' });
     if (!addmCtx.length)       _missingProof.push({ txt:'ADDM not run or no findings — Oracle automated diagnostics did not corroborate this verdict', link:'Run: EXEC DBMS_ADDM.ANALYZE_DB for the problem snapshot range' });
     if (_confSignals.length < 3 && !_sigNew.length) _missingProof.push({ txt:'ASH data not incorporated — AWR averages can hide a 5-minute crisis inside a 60-minute window', link:'Query DBA_HIST_ACTIVE_SESS_HISTORY for the exact problem time slot' });
 
@@ -23073,7 +23362,19 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
 
     // Signal strength progress bar — rds is now initialised
     const _sigFilled   = _confSignals.length;
-    const _sigTotal    = 8;
+    // Gap G: the denominator counts only signals that CAN fire for this verdict
+    // class. Counting non-applicable dimensions (e.g. Segment corroboration for a
+    // COMMIT_LOGGING verdict, or SQL attribution for a pure wait-class bottleneck)
+    // as "did not fire" unfairly deflates the displayed confidence.
+    const _segApplicableVerdict = new Set([
+        'IO_BOTTLENECK','HW_ENQUEUE_CONTENTION','TX_INDEX_CONTENTION',
+        'TX_ROW_LOCK_CONTENTION','UNDO_SEGMENT_EXTENSION','BUFFER_WRITE_PRESSURE',
+        'CONCURRENT_DML_BOTTLENECK','CONCURRENCY'
+    ]).has(_finalPv) || isSqlVerdict;
+    let _sigApplicable = 8;
+    if (!_sqlFitsVerdict)        _sigApplicable--;   // SQL attribution cannot corroborate this verdict
+    if (!_segApplicableVerdict)  _sigApplicable--;   // object-level segment data is not relevant here
+    const _sigTotal    = Math.max(_sigFilled, _sigApplicable);
     // Canonical slot labels used as tooltips — order matches the push() sequence above.
     const _sigSlotLabels = [
         'Wait event dominance — top wait fits the verdict category',
@@ -23081,9 +23382,9 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         'Load profile shift — per-second metrics grew significantly',
         'Efficiency degradation — buffer hit or soft-parse ratio declined',
         'ADDM corroboration — Oracle\'s own engine reached the same conclusion',
-        'Segment corroboration — hot segment delta confirms the bottleneck object',
-        'Window comparability — both capture windows are valid for comparison',
-        'Cross-panel alignment — Load Profile + Wait Events + SQL converge'
+        'AAS at/near saturation — average active sessions approach CPU count',
+        'New wait events — events that appeared only in the problem period',
+        'Segment corroboration — hot segment delta confirms the bottleneck object'
     ];
     const _barFilled = _confSignals.map((sig, i) =>
         `<span class="ov-sig-filled" title="✓ ${_confSignals[i] || sig}" style="width:22px;height:13px;background:${rds.color};box-shadow:0 0 6px ${rds.color}70;cursor:default"></span>`
@@ -23446,6 +23747,24 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         var _verdictLabel = (_finalPv||'').replace(/_/g,' ');
         var pq = null;
 
+        // Gap B: resolve real snap-id boundaries from the AWR context so the
+        // pinpointed query is copy-paste runnable (the BUFFER_WRITE_PRESSURE
+        // delta query embeds [begin_snap_id] / [end_snap_id] / [dbid]
+        // placeholders). Falls back to the bracket placeholders when the AWR
+        // header did not expose snap ids.
+        var _pqRaw2 = (_raw && (_raw.s2 || _raw.bad)) || {};
+        var _pqSnapBegin = _pqRaw2.snap_begin || _pqRaw2.begin_snap || null;
+        var _pqSnapEnd   = _pqRaw2.snap_end   || _pqRaw2.end_snap   || null;
+        var _pqResolveSnaps = function(sql) {
+            if (!sql) return sql;
+            if (_pqSnapBegin != null && _pqSnapEnd != null) {
+                sql = sql.replace(/\[begin_snap_id\]/g, _pqSnapBegin)
+                         .replace(/\[end_snap_id\]/g, _pqSnapEnd)
+                         .replace(/\[dbid\]/g, '(SELECT dbid FROM v$database)');
+            }
+            return sql;
+        };
+
         // Pre-fetch hot segments from AWR for smart query selection
         var _pqSegs = (ctx.segments && ctx.segments._allBad) ? ctx.segments._allBad : [];
         var _pqSegNames = _pqSegs.filter(function(s){return (s.physical_reads||0)+(s.buffer_busy_waits||0)>0}).sort(function(a,b){return ((b.physical_reads||0)+(b.buffer_busy_waits||0))-((a.physical_reads||0)+(a.buffer_busy_waits||0))}).slice(0,3).map(function(s){return s.object_name});
@@ -23590,7 +23909,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
                 + '<div style="font-size:10px;font-weight:700;color:#e2e8f0;margin-bottom:3px">' + _esc(pq.title) + '</div>'
                 + '<div style="font-size:9.5px;color:#64748b;margin-bottom:6px;line-height:1.4">' + _esc(pq.why) + '</div>'
                 + '<pre style="margin:0 0 6px;padding:8px 10px;background:rgba(0,0,0,0.5);border:1px solid rgba(99,102,241,0.18);border-radius:4px;font-size:9.5px;color:#a5b4fc;overflow-x:auto;white-space:pre-wrap;font-family:monospace;line-height:1.55">'
-                + pq.sql.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                + _pqResolveSnaps(pq.sql).replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 + '</pre>'
                 + '<div style="font-size:9px;color:#64748b;line-height:1.5;border-top:1px dashed rgba(99,102,241,0.15);padding-top:5px">'
                 + '<span style="color:#475569;font-weight:700">What to look for: </span>' + _esc(pq.expect)
@@ -23724,13 +24043,14 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
                 + '</div>';
         }
 
-        _peQueriesHtml += '<div style="margin:8px 0 4px;padding:10px 14px;background:rgba(34,197,94,0.04);border-radius:6px;border:1px solid rgba(34,197,94,0.18)">'
-            + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+        _peQueriesHtml += '<details style="margin:8px 0 4px;padding:10px 14px;background:rgba(34,197,94,0.04);border-radius:6px;border:1px solid rgba(34,197,94,0.18)">'
+            + '<summary style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;list-style:none">'
             + '<svg style="width:13px;height:13px;flex-shrink:0" fill="none" stroke="#22c55e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>'
-            + '<span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#22c55e;letter-spacing:0.5px">Next Step</span>'
+            + '<span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#22c55e;letter-spacing:0.5px">Then: Extended Diagnostic Steps</span>'
             + (_skipCount > 0 ? '<span style="font-size:7.5px;color:#4ade80;font-weight:700;background:rgba(74,222,128,0.08);padding:2px 6px;border-radius:3px;border:1px solid rgba(74,222,128,0.2)">SMART: ' + _skipCount + ' step' + (_skipCount>1?'s':'') + ' auto-completed</span>' : '')
             + '<span style="font-size:8px;color:#475569;margin-left:auto;background:rgba(34,197,94,0.08);padding:2px 7px;border-radius:3px;border:1px solid rgba(34,197,94,0.2)">' + _esc2(diag.event) + '</span>'
-            + '</div>';
+            + '</summary>'
+            + '<div style="font-size:8.5px;color:#64748b;margin:4px 0 6px;line-height:1.4">Run after the pinpointed query above when you need to drill deeper.</div>';
 
         _peQueriesHtml += _crossPanel;
         _peQueriesHtml += _skipHtml;
@@ -23746,7 +24066,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
             _peQueriesHtml += '</div></details>';
         }
 
-        _peQueriesHtml += '</div>';
+        _peQueriesHtml += '</details>';
     })();
 
     // ── Spec improvements: hypothesis badge + falsifiers + evidence gates ───────
@@ -24612,6 +24932,18 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         if (_wfShow.length === 0 && !(topWaitPct > 15)) return '';
 
         // ── Primary finding sentence ───────────────────────────────────────────
+        // Gap F: the absolute top wait can be a chronic background event that was
+        // already dominant in the baseline. When the LARGEST regression versus the
+        // baseline is a different event, name it so the reader prioritises the
+        // actual driver rather than the steady-state dominant wait. `_effectiveDeltaWait`
+        // already skips waits that were structurally dominant in the good period.
+        const _wDeltaDrv = _effectiveDeltaWait;
+        const _wDeltaDiffers = !!(_wDeltaDrv && _wDeltaDrv.event && _wDeltaDrv.delta >= 5
+            && topWaitName && _wDeltaDrv.event.toLowerCase() !== topWaitName.toLowerCase());
+        const _wDeltaNote = _wDeltaDiffers
+            ? ` The largest regression versus the baseline is <span style="color:#f59e0b;font-weight:800">${esc(_wDeltaDrv.event)}</span>`
+              + ` (+${_fw1(_wDeltaDrv.delta)}pp, ${_fw1(_wDeltaDrv.goodPct)}% \u2192 ${_fw1(_wDeltaDrv.badPct)}%) \u2014 prioritise this over the steady-state dominant wait.`
+            : '';
         let _wPf = '';
         if (_wExDPct != null && _wExDPct > 15 && _wDatVol < 15 && isSqlVerdict && _dt.isPureDML) {
             _wPf = `This DML executed `
@@ -24636,7 +24968,8 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
                     ? ` \u2014 SQL <code style="color:#a78bfa">${esc(domSqlId)}</code>`
                       + ` drove <span style="color:#a78bfa;font-weight:700">${_fw1(domSqlShare)}%</span> of total load`
                     : '')
-                + '.';
+                + '.'
+                + _wDeltaNote;
         }
         if (!_wPf) return '';
 
@@ -25280,6 +25613,15 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         // escaped via esc() at the point of insertion.
     })();
 
+    // Gap C: when the structured WHY is shown it already renders a rich
+    // "Contributing Factors" decomposition, so the causal-pattern block reads as
+    // a duplicate contributor list. Demote it to a collapsed disclosure in that
+    // case (keeps the ranked detection available); when only the plain-prose
+    // fallback is shown, keep it expanded since nothing else competes.
+    const _causalPatBlockOut = (_causalPatBlock && _whyStructuredHtml)
+        ? `<details style="margin-top:12px"><summary style="font-size:9px;color:#64748b;cursor:pointer;list-style:none;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 0">Causal pattern detection (ranked) \u25be</summary>${_causalPatBlock}</details>`
+        : _causalPatBlock;
+
     const whyBlockFinal = `<div class="ov-section ov-section--why" style="margin:0 0 18px;padding:16px 18px;background:rgba(165,180,252,0.06);border:1px solid rgba(165,180,252,0.22);border-left:4px solid #a5b4fc;border-radius:0 10px 10px 0;animation:section-glow-purple 3.6s ease-in-out infinite;position:relative;overflow:hidden">`+
         `<div style="position:absolute;top:0;left:4px;right:0;height:1px;background:linear-gradient(90deg,#a5b4fcaa,transparent 70%)"></div>`+
         `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">`+
@@ -25292,7 +25634,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
             : `<p style="margin:0 0 12px;line-height:1.9;font-size:14px;color:#e2e8f0;font-weight:400">${part2}</p>`
               + `${_inThisCaseHtml}`)+
         `${_corrChipsHtml}`+
-        `${_causalPatBlock}`+
+        `${_causalPatBlockOut}`+
         `${_dt.isPureDML ? _dmlFalsHtml : _falsHtml}`+
         `</div>`;
 
@@ -25462,6 +25804,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
     </div>`;
     // T2 FIX: Cache result for duplicate-call guard
     generateComparisonVerdictNarrative._cachedResult = _finalHtml;
+    generateComparisonVerdictNarrative._cachedSig = _vsig;
     generateComparisonVerdictNarrative._rendered = true;
     return _finalHtml;
 }
@@ -32442,7 +32785,7 @@ function renderWaitComparison(ctx) {
 
     const allNames=[...new Set([...ev1.map(e=>e.event_name),...ev2.map(e=>e.event_name)])];
 
-    const rows=allNames.map(n=>{const e1=map1[n]||{},e2=ev2.find(e=>e.event_name===n)||{};return{name:n,pct1:e1.pct_db_time||0,pct2:e2.pct_db_time||0,avg1:e1.avg_wait_ms||0,avg2:e2.avg_wait_ms||0,w1:e1.total_waits||0,w2:e2.total_waits||0,wc:e1.wait_class||e2.wait_class||''};}).sort((a,b)=>Math.max(b.pct1,b.pct2)-Math.max(a.pct1,a.pct2)).slice(0,15);
+    const rows=allNames.map(n=>{const e1=map1[n]||{},e2=ev2.find(e=>e.event_name===n)||{};return{name:n,pct1:e1.pct_db_time||0,pct2:e2.pct_db_time||0,avg1:e1.avg_wait_ms||0,avg2:e2.avg_wait_ms||0,w1:e1.total_waits||0,w2:e2.total_waits||0,wc:e1.wait_class||e2.wait_class||''};}).sort((a,b)=>Math.max(b.pct1,b.pct2)-Math.max(a.pct1,a.pct2)).slice(0,25);
 
     // ── Cross-Panel Intelligence: read verdict + SQL correlation ──
     const _v = ctx.verdict || {};
@@ -32477,6 +32820,33 @@ function renderWaitComparison(ctx) {
             }
         }
     });
+
+    // ── RCA-Linked event set ─────────────────────────────────────────────────
+    // An event is "RCA linked" if it is the primary or corroborating signal for
+    // the diagnosed bottleneck. These events are always shown and get the
+    // ⚡ RCA LINKED badge. Everything else below the impact threshold is hidden
+    // by default and revealed via the "Show low-impact" toggle.
+    const _rcaLinkedNames = new Set();
+    // (a) Top wait event identified by SQL-correlation engine
+    if (_corrTopWait) _rcaLinkedNames.add(_corrTopWait);
+    // (b) Events that SQL analysis correlates to driving queries
+    Object.entries(_waitToSqls).forEach(([wn]) => {
+        const _mr = rows.find(r => r.name === wn);
+        if (_mr && (_mr.pct2 >= 2 || _mr.avg2 >= 20)) _rcaLinkedNames.add(wn);
+    });
+    // (c) Events from causal-pattern chains
+    _causalPatterns.forEach(cp => { if (cp.waitEvent) _rcaLinkedNames.add(cp.waitEvent); });
+    // (d) Top-3 non-idle events with big delta AND meaningful absolute share
+    rows.filter(r => !/idle|DB CPU/i.test(r.name||'') && (r.pct2 - r.pct1) > 5 && r.pct2 >= 3)
+        .slice(0, 3).forEach(r => _rcaLinkedNames.add(r.name));
+    // (e) Single highest-pct2 non-idle event if it's clearly dominant
+    const _topBadRow = rows.filter(r => !/idle|DB CPU/i.test(r.name||'')).sort((a,b) => b.pct2 - a.pct2)[0];
+    if (_topBadRow && _topBadRow.pct2 >= 5) _rcaLinkedNames.add(_topBadRow.name);
+    // Pre-compute counts for header display
+    const _focusCount = rows.filter(r => !/idle/i.test(r.wc||'') && (
+        _rcaLinkedNames.has(r.name) || r.pct2 >= 2 || Math.abs(r.pct2 - r.pct1) > 3 || r.avg2 >= 20
+    )).length;
+    const _hiddenCount = rows.filter(r => !/idle/i.test(r.wc||'')).length - _focusCount;
 
     // Register wait panel findings on ctx._panelInsights
     const _worsened = rows.filter(r => (r.pct2 - r.pct1) > 3 && r.pct2 >= 1);
@@ -32590,48 +32960,6 @@ function renderWaitComparison(ctx) {
         })()}
 
         ${(()=>{
-            // Baseline-only signals: events present in baseline with >1% DB Time that disappeared
-            // or dropped >80% in the bad period — often masked by new dominant workload
-            // DB CPU is intentionally excluded from charts (scale reasons) — not counted as absent
-            const _dbCpuBaseline = ev1.find(e => /^\s*DB\s*CPU\s*$/i.test(e.event_name));
-            const _baselineOnly = ev1.filter(e => {
-                const pct1 = e.pct_db_time || 0;
-                if (pct1 < 1) return false;  // only significant baseline events
-                if (/^\s*DB\s*CPU\s*$/i.test(e.event_name)) return false; // excluded from chart — shown in KPI tiles
-                const e2 = ev2.find(x => x.event_name === e.event_name);
-                const pct2 = e2 ? (e2.pct_db_time || 0) : 0;
-                return pct2 < pct1 * 0.2;  // dropped >80%
-            });
-            if (!_baselineOnly.length) return '';
-            const _knownConcurrency = e => /cursor.*pin|latch|lock|enq:|buffer busy/i.test(e.event_name||'');
-            const _highValue = _baselineOnly.filter(e => e.pct_db_time > 1 || _knownConcurrency(e));
-            if (!_highValue.length) return '';
-            return `<div style="background:rgba(15,23,42,0.7);border:1px solid rgba(245,158,11,0.22);border-left:4px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:16px">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-                    <svg width="14" height="14" fill="none" stroke="#f59e0b" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-                    <span style="font-size:10px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:0.5px">Events Absent in Bad Period</span>
-                    <span style="font-size:8.5px;color:#64748b;margin-left:4px">Present in ${esc(lbl1)}, disappeared in ${esc(lbl2)} — swamped by new dominant workload, not resolved</span>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px">
-                ${_highValue.map(e => {
-                    const isContention = _knownConcurrency(e);
-                    const col = isContention ? '#f59e0b' : '#64748b';
-                    const note = /cursor.*pin S wait on X/i.test(e.event_name||'')
-                        ? 'Cursor contention — masked when heavier workload dominated. May resurface after fix.'
-                        : isContention ? 'Concurrency signal — may resurface when dominant bottleneck is resolved.'
-                        : 'Swamped by new workload volume in bad period — may reappear when dominant bottleneck resolves.';
-                    return `<div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.18);border-radius:6px;padding:7px 12px;min-width:200px;max-width:420px">
-                        <div style="font-size:9.5px;font-weight:700;color:${col};margin-bottom:3px">${esc(e.event_name)}</div>
-                        <div style="font-size:8.5px;color:#64748b">${(+(e.pct_db_time||0)).toFixed(1)}% DB Time in baseline &nbsp;·&nbsp; avg ${(+(e.avg_wait_ms||0)).toFixed(1)}ms</div>
-                        <div style="font-size:8px;color:#475569;margin-top:2px;font-style:italic">${note}</div>
-                    </div>`;
-                }).join('')}
-                </div>
-                ${_dbCpuBaseline ? `<div style="margin-top:8px;font-size:8px;color:#475569;font-style:italic;border-top:1px solid rgba(245,158,11,0.12);padding-top:6px">DB CPU: ${(+(_dbCpuBaseline.pct_db_time||0)).toFixed(1)}% in baseline — intentionally excluded from wait event charts (scale). See SQL Analysis tab for CPU breakdown.</div>` : ''}
-            </div>`;
-        })()}
-
-        ${(()=>{
             // Section 5: Wait Class Summary Strip — pills sorted by Bad % DB Time descending
             const _wcColors5={configuration:'#ef4444',concurrency:'#f59e0b',commit:'#3b82f6',application:'#f97316','user i/o':'#14b8a6','system i/o':'#06b6d4',network:'#6b7280',cluster:'#8b5cf6',memory:'#ec4899',other:'#94a3b8'};
             const _clsT5={}, _clsN5={};
@@ -32666,6 +32994,52 @@ function renderWaitComparison(ctx) {
         })()}
 
         <!-- Hot Segments — Summary cards + table layout -->
+        <style>
+            /* Compact density mode — squeezes rows into a tighter tabular layout */
+            #hot-segments-comparison.hs-dense table td { padding-top:3px !important; padding-bottom:3px !important; }
+            #hot-segments-comparison.hs-dense table th { padding-top:4px !important; padding-bottom:4px !important; }
+            #hot-segments-comparison.hs-dense table td span[style*="height:20px"] { height:13px !important; }
+            #hs-focus-btn:hover, #hs-dense-btn:hover { border-color:#475569 !important; }
+            /* Performance-drainer flash — pulses the ⚡ RCA badge on the highest-impact segment */
+            @keyframes hsDrainFlash { 0%,100% { box-shadow:0 0 4px rgba(244,63,94,0.5),0 0 0 1px rgba(244,63,94,0.35); opacity:1; } 50% { box-shadow:0 0 13px rgba(244,63,94,0.95),0 0 0 1px rgba(244,63,94,0.8); opacity:0.82; } }
+            .hs-drain-flash { display:inline-block; animation:hsDrainFlash 1.15s ease-in-out infinite; }
+            @media (prefers-reduced-motion: reduce) { .hs-drain-flash { animation:none; } }
+            /* Tabular grid lines — column + row separators for scan-ability (dashboard-design) */
+            .hs-main-table { border-collapse:collapse; }
+            .hs-main-table > thead > tr > th { border-bottom:2px solid rgba(148,163,184,0.22) !important; background:rgba(148,163,184,0.035); }
+            .hs-main-table > thead > tr > th:not(:last-child),
+            .hs-main-table > tbody > tr > td:not(:last-child) { border-right:1px solid rgba(148,163,184,0.07); }
+            .hs-main-table > tbody > tr > td:nth-child(4),
+            .hs-main-table > tbody > tr > td:nth-child(6),
+            .hs-main-table > tbody > tr > td:nth-child(8) { font-variant-numeric:tabular-nums; }
+            /* ── Zoom / narrow-width resilience ───────────────────────────
+               Browser zoom shrinks the CSS-px viewport; the nowrap text columns
+               keep their intrinsic width and overflow the panel, showing a
+               horizontal scrollbar (the "side line"). Let the wide text columns
+               wrap and step horizontal padding + the largest fonts down as the
+               viewport tightens so the 9-column grid keeps fitting in place. */
+            .hs-main-table > tbody > tr > td:first-child,
+            .hs-main-table > tbody > tr > td:nth-child(3) { white-space:normal !important; overflow-wrap:anywhere; }
+            @media (max-width:1600px) {
+                .hs-main-table > thead > tr > th,
+                .hs-main-table > tbody > tr > td { padding-left:7px !important; padding-right:7px !important; }
+            }
+            @media (max-width:1380px) {
+                .hs-main-table { font-size:0.74rem !important; }
+                .hs-main-table > thead > tr > th,
+                .hs-main-table > tbody > tr > td { padding-left:5px !important; padding-right:5px !important; }
+                .hs-main-table > tbody > tr > td:first-child span[style*="0.85rem"] { font-size:0.78rem !important; }
+                .hs-main-table > tbody > tr > td:nth-child(7) { max-width:185px !important; }
+            }
+            @media (max-width:1180px) {
+                .hs-main-table { font-size:0.68rem !important; }
+                .hs-main-table > thead > tr > th,
+                .hs-main-table > tbody > tr > td { padding-left:4px !important; padding-right:4px !important; }
+                .hs-main-table > tbody > tr > td:first-child span[style*="0.85rem"] { font-size:0.72rem !important; }
+                .hs-main-table .hs-drain-flash { font-size:0.5rem !important; padding:1px 5px !important; margin-left:4px !important; }
+                .hs-main-table > tbody > tr > td:nth-child(7) { max-width:140px !important; }
+            }
+        </style>
         <div class="mb-4" style="background:linear-gradient(135deg,#0c1222 0%,#0f172a 40%,#111827 100%);border-radius:12px;border:1px solid #1e293b;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.03)">
             <!-- Header -->
             <div style="padding:14px 20px 10px;border-bottom:1px solid rgba(255,255,255,0.04);background:linear-gradient(90deg,rgba(244,63,94,0.04),rgba(245,158,11,0.03),transparent)">
@@ -32689,13 +33063,13 @@ function renderWaitComparison(ctx) {
                             <option value="all_conf">All Confidence</option>
                         </select>
                         <select id="hs-sort" onchange="_hsSort(this.value)" style="font-size:10px;color:#94a3b8;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 22px 5px 8px;cursor:pointer;appearance:none;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%275%27%3E%3Cpath d=%27M0 0l4 5 4-5z%27 fill=%27%2394a3b8%27/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 6px center">
-                            <option value="confidence">Confidence Priority</option>
-                            <option value="severity">Severity Priority</option>
-                            <option value="delta">Δ% Highest</option>
-                            <option value="score">Activity Score</option>
-                            <option value="pct">% Total Highest</option>
+                            <option value="score" selected>Most Problematic</option>
+                            <option value="delta">Δ% Change</option>
+                            <option value="pct">% Total Share</option>
                             <option value="name">Name A-Z</option>
                         </select>
+                        <button id="hs-focus-btn" onclick="_hsToggleImportant()" aria-pressed="true" title="Focus: show only high-impact segments (culprits, product tables, and high delta/priority movers) — hides chronic baseline and low-priority noise" style="font-size:10px;color:#94a3b8;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 9px;cursor:pointer;font-weight:600;white-space:nowrap;transition:all .12s">⊙ Focus</button>
+                        <button id="hs-dense-btn" onclick="_hsToggleDense()" aria-pressed="true" title="Compact: squeeze rows into a denser tabular layout" style="font-size:10px;color:#94a3b8;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 9px;cursor:pointer;font-weight:600;white-space:nowrap;transition:all .12s">⊟ Compact</button>
                         <span id="hs-count-badge" style="font-size:9px;color:#64748b;white-space:nowrap"></span>
                     </div>
                 </div>
@@ -32707,7 +33081,7 @@ function renderWaitComparison(ctx) {
         <div class="card overflow-x-auto">
 
             <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #1e293b">
-                <span style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase">Wait Events (${rows.filter(r=>Math.max(r.pct1,r.pct2)>=0.5).length} significant / ${rows.length} total)</span>
+                <span style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase">Wait Events — <span style="color:#818cf8;font-weight:800">${_focusCount}</span> impactful / ${rows.length} total${_hiddenCount > 0 ? ` <span style="color:#475569;font-size:9px">(${_hiddenCount} low-impact hidden)</span>` : ''}</span>
                 <div style="display:flex;align-items:center;gap:8px">
                     <span style="font-size:9px;color:#475569">Sort:</span>
                     <select id="wait-sort-select" onchange="_sortWaitTable(this.value)" style="font-size:9px;color:#c7d2fe;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:2px 6px;cursor:pointer">
@@ -32719,7 +33093,7 @@ function renderWaitComparison(ctx) {
                         <option value="w2">Occurrences (Bad)</option>
                         <option value="name">Event Name A→Z</option>
                     </select>
-                    <button onclick="document.querySelectorAll('.wait-minor-row').forEach(r=>r.style.display=r.style.display==='none'?'':'none');this.textContent=this.textContent.includes('Show')?'Hide <0.5%':'Show all'" style="font-size:9px;color:#818cf8;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.2);border-radius:4px;padding:2px 8px;cursor:pointer">Show all</button>
+                    ${_hiddenCount > 0 ? `<button onclick="document.querySelectorAll('#wait-events-tbody tr.wait-minor-row').forEach(r=>r.style.display=r.style.display==='none'?'':'none');this.textContent=this.textContent.includes('Hide')?'Show ${_hiddenCount} low-impact':'Hide low-impact'" style="font-size:9px;color:#818cf8;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.2);border-radius:4px;padding:2px 8px;cursor:pointer">Show ${_hiddenCount} low-impact</button>` : ''}
                 </div>
             </div>
 
@@ -32759,7 +33133,11 @@ function renderWaitComparison(ctx) {
                         const assessBg=_isThr?'rgba(245,158,11,0.08)':(isMajor?'rgba(239,68,68,0.1)':isNotable?'rgba(245,158,11,0.08)':isImproved?'rgba(74,222,128,0.08)':'rgba(71,85,105,0.08)');
                         const leftBorder=isMajor?'border-left:3px solid #ef4444':isImproved?'border-left:3px solid #22c55e':'';
                         const ann=_getWaitAnnotation(r.name,r.pct2,r.avg2);
-                        const isMinor=Math.max(r.pct1,r.pct2)<0.5;
+                        // RCA linkage + impact gate — drives badge and default visibility
+                        const _isRcaLinked = _rcaLinkedNames.has(r.name);
+                        // Impactful = always shown; minor = hidden until user requests
+                        const _isImpactful = _isRcaLinked || r.pct2 >= 2 || Math.abs(d) > 3 || r.avg2 >= 20;
+                        const isMinor = !_isImpactful;
                         // S6c: bad avg ms color
                         const _avg2Col=r.avg2>=500?'#ef4444':r.avg2>=100?'#f97316':r.avg2>=10?'#fbbf24':'#475569';
                         // S6d: inline mini-bars
@@ -32927,7 +33305,7 @@ function renderWaitComparison(ctx) {
                         const _rowClick=_showKB?`onclick="if(this._toggling)return;this._toggling=true;setTimeout(()=>this._toggling=false,300);const r=document.getElementById('${_catRowId}-row');if(!r)return;const opening=r.style.display==='none';document.querySelectorAll('#wait-events-table tr.wait-expanded').forEach(t=>{if(t!==this){t.classList.remove('wait-expanded');const d=t.nextElementSibling;if(d&&d.id&&d.id.startsWith('wcat-'))d.style.display='none'}});if(opening){r.style.display='';this.classList.add('wait-expanded');setTimeout(()=>{const rb=r.getBoundingClientRect();if(rb.bottom>window.innerHeight){r.scrollIntoView({behavior:'smooth',block:'nearest'})}},50)}else{r.style.display='none';this.classList.remove('wait-expanded')}" style="cursor:pointer;user-select:none${isMinor?';display:none':''}${leftBorder?';'+leftBorder:''}"`:`style="${isMinor?'display:none':''}${leftBorder?leftBorder:''}"`;                        // Expand chevron indicator
                         const _chevron=_showKB?`<span class="wait-chevron" style="display:inline-block;font-size:7px;color:#475569;margin-right:5px;transition:transform 0.15s;vertical-align:middle">▶</span>`:'';
                         return `<tr class="${isMinor?'wait-minor-row':''}" data-pct1="${r.pct1}" data-pct2="${r.pct2}" data-delta="${d}" data-avg1="${r.avg1}" data-avg2="${r.avg2}" data-w2="${r.w2||0}" data-name="${esc(r.name)}" data-wc="${esc((r.wc||'').toLowerCase())}" data-minor="${isMinor?1:0}" ${_rowClick}>
-                            <td class="text-white text-sm font-medium">${_chevron}${_nameDiv}${avgMsPill}${!_showKB&&ann?`<div style="color:#94a3b8;font-size:10px;margin-top:2px;line-height:1.4">${ann.tip}</div>`:''}\
+                            <td class="text-white text-sm font-medium">${_chevron}${_nameDiv}${avgMsPill}${_isRcaLinked?`<span class="hs-drain-flash" title="This wait event is the primary or corroborating signal for the diagnosed root cause — it is directly linked to the RCA bottleneck." style="font-size:0.52rem;padding:1px 6px;border-radius:3px;background:#f43f5e;color:#fff;border:1px solid #fda4af;font-weight:800;letter-spacing:0.04em;margin-left:5px;white-space:nowrap;vertical-align:middle">⚡ RCA LINKED</span>`:''}${!_showKB&&ann?`<div style="color:#94a3b8;font-size:10px;margin-top:2px;line-height:1.4">${ann.tip}</div>`:''}\
 ${!_showKB&&ann?.fix?`<div style="color:#38bdf8;font-size:9.5px;margin-top:2px">Fix: ${esc(ann.fix)}</div>`:''}\
 ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;margin-top:1px;margin-left:12px">click to expand</div>`:''}</td>
                             <td class="text-xs">${ann?`<span style="color:${(r.wc==='Configuration'||ann.cls==='Configuration')?'#e879f9':'#94a3b8'};font-weight:700">${esc(ann.cls)}</span>`:esc(r.wc)}</td>
@@ -33092,6 +33470,15 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                 // Bug2 fix: _maxDelta uses numeric sentinel for sorting
                 s._maxDelta = Math.max(...deltas.map(x=>x.d));
                 s._maxDeltaRaw = deltas.reduce((best,x) => (x.d > (best?.d??-Infinity) ? x : best), null);
+                // Dominant metric = largest bad-period absolute value — the segment's real
+                // story. Drives the Δ% display and the "genuinely new" test so an existing
+                // segment that merely gained a minor new counter is not mislabelled NEW.
+                let _domF = null, _domBv = -1;
+                FIELDS.forEach(f => { const bv = s['b_'+f]||0; if (bv > _domBv) { _domBv = bv; _domF = f; } });
+                s._domField = _domF;
+                s._domDeltaRaw = _domF ? _d(s, _domF) : null;
+                // Genuinely new = absent from the baseline entirely (appeared only in bad).
+                s._isTrulyNew = FIELDS.every(f => (s['g_'+f]||0) === 0);
                 s._hasContention = (s.b_row_lock_waits||0)>0 || (s.b_itl_waits||0)>0 || (s.b_buffer_busy_waits||0)>0;
                 s._hasWritePressure = (s.b_physical_writes||0)>0 && _dNum(s,'physical_writes')>15;
                 s._hasDirectReads = (s.b_direct_reads||0) > 0;
@@ -33151,9 +33538,11 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                 if ((s.b_itl_waits||0)>0) s._cats.push({t:'ITL',c:'#a855f7'});
                 if ((s.b_table_scans||0)>0) s._cats.push({t:'Table Scan',c:'#14b8a6'});
                 if ((s.b_db_block_changes||0)>0 && s._pctDBC > 10) s._cats.push({t:'Block Chg',c:'#8b5cf6'});
-                if (s._isLinked) s._cats.push({t:'⚡ RCA',c:'#06b6d4'});
+                if (s._isLinked) s._cats.push({t:'RCA·link',c:'#64748b'}); // upgraded to "⚡ RCA" later only when confirmed
                 if (s._hasSqlCausal) s._cats.push({t:'⚡ SQL',c:'#ef4444'});
-                if (FIELDS.some(f => !s['g_'+f] && (s['b_'+f]||0)>0)) s._cats.push({t:'NEW',c:'#10b981'});
+                // "NEW" tag only when the segment is genuinely absent from the baseline —
+                // not when an existing segment merely gained one minor new counter (de-clutter).
+                if (s._isTrulyNew) s._cats.push({t:'NEW',c:'#10b981'});
                 // Combined contention badge
                 if ((s.b_row_lock_waits||0)>0 && (s.b_itl_waits||0)>0) s._cats.push({t:'Combined',c:'#e11d48'});
                 // INDEX with high logical_reads = index full scan anomaly
@@ -33417,12 +33806,207 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
             };
             _all.forEach(s => { s._diag = _diagnose(s); });
 
+            // ── REGRESSION SCORE (composite metric, 0-100) ─────────────────────────
+            // Three pillars: delta magnitude (35%) + % of total activity (35%)
+            //                + contention signal (20%) + SQL causal link (10%)
+            // Purpose: produces a single number that correctly ranks a segment with
+            // moderate delta but dominant %total ABOVE one with huge delta but tiny footprint.
+            const _maxScore = Math.max(1, ..._all.map(s => s._score || 0));
+            _all.forEach(s => {
+                // Peer-normalised ABSOLUTE impact (0-1): how big is this segment's raw activity
+                // versus the busiest segment. Keeps low-volume objects from over-ranking.
+                s._impactNorm = Math.min((s._score || 0) / _maxScore, 1.0);
+                // For a truly-new segment the %-change is mathematically infinite (0→N), so delta
+                // magnitude is meaningless — rank it by ABSOLUTE impact instead. A 0→12M segment
+                // is a real problem; a 0→950 segment is noise. Regressions keep real delta.
+                const _deltaNorm  = s._isTrulyNew ? s._impactNorm : (s._maxDelta >= 9999 ? 1.0 : Math.min(s._maxDelta / 300, 1.0));
+                const _pctNorm    = Math.min(s._maxPct / 50, 1.0);
+                const _contScore  = s._hasContention ? 1.0 : 0;
+                const _sqlScore   = s._hasSqlCausal ? 1.0 : s._isLinked ? 0.5 : 0;
+                s._regrScore = Math.round(
+                    35 * _deltaNorm + 35 * _pctNorm + 20 * _contScore + 10 * _sqlScore
+                );
+                // A brand-new segment with negligible absolute impact AND a small footprint is
+                // background noise — flag it so it is de-emphasised and sinks in every sort.
+                s._isLowImpactNew = s._isTrulyNew && s._impactNorm < 0.05 && s._maxPct < 20;
+            });
+
+            // ── PRODUCT-SCHEMA DETECTION (Oracle architect prioritisation) ──────────
+            // Oracle-internal schemas own dictionary objects (SEG$, I_FILE#_BLOCK#, …).
+            // Contention on those is almost always a SECONDARY SYMPTOM of application
+            // workload (e.g. heavy concurrent INSERT forcing space-management on SEG$),
+            // NOT the root cause. The root cause lives in the application's PRODUCT schema.
+            // We auto-detect the dominant application schema (no hard-coding) by weighting
+            // each non-internal owner's SQL linkage + regression activity + segment count.
+            const _INTERNAL_SCHEMAS = new Set(['SYS','SYSTEM','SYSAUX','DBSNMP','OUTLN','XDB','WMSYS','CTXSYS','MDSYS','ORDSYS','ORDDATA','ORDPLUGINS','SI_INFORMTN_SCHEMA','OLAPSYS','EXFSYS','APPQOSSYS','AUDSYS','GSMADMIN_INTERNAL','ORACLE_OCM','DVSYS','DVF','LBACSYS','OJVMSYS','DBSFWUSER','REMOTE_SCHEDULER_AGENT','SYS$UMF','GGSYS','ANONYMOUS','XS$NULL','MDDATA','SPATIAL_WFS_ADMIN_USR','SPATIAL_CSW_ADMIN_USR']);
+            const _isInternalOwner = o => { o = (o||'').toUpperCase(); return !o || _INTERNAL_SCHEMAS.has(o) || /^(APEX_|FLOWS_|APP_|C##)/.test(o); };
+            // Framework / infrastructure object patterns (heuristic, not per-table hardcoding):
+            // dictionary-style names ($/#) and common framework/runtime prefixes. Used to route
+            // non-product objects (e.g. SRE_*, CIS_*) into the System / Infrastructure basket.
+            const _FRAMEWORK_RE = /[$#]|^(SRE|CIS|GG|AUD|DBMS|UTL)_/i;
+            const _schemaScore = {};
+            _all.forEach(s => {
+                const o = (s.owner||'').toUpperCase();
+                if (_isInternalOwner(o)) return;
+                const e = _schemaScore[o] || (_schemaScore[o] = { activity:0, sqlLinks:0, causal:0, segs:0 });
+                e.activity += s._regrScore || 0;
+                e.segs     += 1;
+                if (s._isLinked)     e.sqlLinks += 1;
+                if (s._hasSqlCausal) e.causal   += 1;
+            });
+            // Dominant application schema = the product schema. SQL linkage weighted
+            // heavily because the regressed SQL defines what the product workload touches.
+            let _productSchema = null, _bestSchema = -1;
+            Object.entries(_schemaScore).forEach(([o,v]) => {
+                const sc = v.causal*6 + v.sqlLinks*3 + v.segs + v.activity/25;
+                if (sc > _bestSchema) { _bestSchema = sc; _productSchema = o; }
+            });
+            window._hsProductSchema = _productSchema;
+
+            // ── PER-SEGMENT SCHEMA FLAGS + PRIORITY SCORE + CULPRIT ─────────────────
+            _all.forEach(s => {
+                const o = (s.owner||'').toUpperCase();
+                s._isInternal     = _isInternalOwner(o);
+                s._isProduct      = !!_productSchema && o === _productSchema;
+                s._isSecondaryApp = !s._isInternal && !s._isProduct;
+                // System / Infrastructure: Oracle dictionary schemas OR framework/runtime
+                // objects (dictionary-style $/# names, or framework prefixes). Never a
+                // product object. Contention here is a SECONDARY symptom of application
+                // workload, routed to its own de-prioritised basket.
+                s._isSystem = s._isInternal || (!s._isProduct && _FRAMEWORK_RE.test(s.object_name||''));
+                // Internal dictionary object showing contention/linkage = secondary symptom
+                s._isInternalSymptom = s._isInternal && (s._hasContention || s._isLinked || s._sev==='critical' || s._sev==='high');
+                // Broader secondary-symptom flag (dictionary + framework) for badge + demotion
+                s._isSecondarySymptom = s._isInternalSymptom || (s._isSystem && (s._hasContention || s._isLinked));
+                // PRIORITY SCORE — canonical ranking (regression + schema awareness). Product
+                // boosted; dictionary/framework symptoms demoted so application objects rank first.
+                s._priorityScore = Math.max(0, Math.round(
+                    (s._regrScore || 0)
+                    + (s._isProduct ? 18 : 0)
+                    + (s._isSecondaryApp && !s._isSystem ? 4 : 0)
+                    + (s._hasSqlCausal ? 8 : 0)
+                    - (s._isInternalSymptom ? 30 : 0)
+                    - (s._isSystem && !s._isInternal && (s._hasContention || s._isLinked) ? 22 : 0)
+                ));
+                // Culprit: RCA-linked, an APPLICATION object (not dictionary/framework), AND
+                // shows ACTUAL regression (delta>5 or NEW) or a direct SQL causal chain.
+                const _showsActualRegr = s._isTrulyNew || s._maxDelta > 5;
+                s._isCulprit = s._isLinked && !s._isSystem && (s._hasSqlCausal || (_showsActualRegr && s._regrScore >= 30));
+                // ── RCA TAG RIGOR ───────────────────────────────────────────────────
+                // The bright "⚡ RCA" flash is reserved for a CONFIRMED application root
+                // cause: an app object (not dictionary/framework) referenced by a problematic
+                // SQL AND corroborated by an active problematic wait event (or a direct CAUSAL
+                // SQL chain). Dictionary/framework links stay a muted "RCA·symptom"; an
+                // unconfirmed application link stays a muted "RCA·link".
+                if (s._isLinked) {
+                    const _rt = s._cats.find(c => c.t === '⚡ RCA' || c.t === 'RCA·link' || c.t === 'RCA·symptom');
+                    const _waitCorroborated =
+                          (s._hasContention  && (_kb.hasTXRowLock || _kb.hasTXITL || _kb.hasBufferBusy))
+                       || (s._hasDirectReads &&  _kb.hasDirectPath);
+                    const _confirmedRoot = !s._isSystem && (s._hasSqlCausal || (s._isCulprit && _waitCorroborated));
+                    if (_rt) {
+                        if (_confirmedRoot)   { _rt.t = '⚡ RCA';       _rt.c = '#06b6d4'; }
+                        else if (s._isSystem) { _rt.t = 'RCA·symptom'; _rt.c = '#64748b'; }
+                        else                  { _rt.t = 'RCA·link';    _rt.c = '#64748b'; }
+                    }
+                }
+            });
+
+            // ── PERFORMANCE DRAINER (mathematically-driven RCA highlight) ────────────
+            // The performance drainer is the segment draining the most DB time. We identify
+            // it by the same defensible priority math used for ranking (regression magnitude
+            // + %total share + active contention + product weight), restricted to APPLICATION
+            // segments (System/dictionary objects are secondary symptoms, never the drainer).
+            // A segment is flagged when EITHER:
+            //   (a) it is the single highest-priority application segment AND its severity is
+            //       critical/high AND that priority clears a real-impact floor (≥25), OR
+            //   (b) it dominates a time-costly contention resource on its own — holding ≥40%
+            //       of all buffer-busy / row-lock / ITL waits (a genuine hot-block owner).
+            // Flagged drainers get a flashing ⚡ RCA badge so the eye lands on the true root
+            // cause even when no SQL text happens to name the segment. System never flashes.
+            (function() {
+                const _appSegs = _all.filter(s => !s._isSystem);
+                let _top = null, _topPri = -1;
+                _appSegs.forEach(s => { const p = s._priorityScore||0; if (p > _topPri) { _topPri = p; _top = s; } });
+                _all.forEach(s => {
+                    const _critHigh = s._sev === 'critical' || s._sev === 'high';
+                    const _dominatesContention = !s._isSystem && _critHigh &&
+                        ((s._pctBB||0) >= 40 || (s._pctRL||0) >= 40 || (s._pctIT||0) >= 40);
+                    s._isDrainer = (!!_top && s === _top && _critHigh && _topPri >= 25) || _dominatesContention;
+                });
+            })();
+
+            // ── IQR OUTLIER DETECTION (Tukey's fence) ────────────────────────────────
+            // Flags segments whose delta is statistically extreme vs the peer group.
+            // Threshold = Q3 + 1.5×IQR of positive deltas.
+            (function() {
+                const _posDel = _all
+                    .map(s => s._maxDelta >= 9999 ? null : s._maxDelta)
+                    .filter(d => d !== null && d > 0)
+                    .sort((a,b) => a-b);
+                if (_posDel.length >= 4) {
+                    const q1 = _posDel[Math.floor(_posDel.length * 0.25)];
+                    const q3 = _posDel[Math.floor(_posDel.length * 0.75)];
+                    const fence = q3 + 1.5 * (q3 - q1);
+                    _all.forEach(s => {
+                        s._isOutlier = s._maxDelta < 9999 && s._maxDelta > fence && fence > 0;
+                    });
+                } else {
+                    _all.forEach(s => { s._isOutlier = false; });
+                }
+            })();
+
+            // ── IMPROVEMENT CONTEXT ───────────────────────────────────────────────────
+            // Segments common to BOTH periods that got meaningfully BETTER (delta < -20%).
+            // These reveal capacity shift: workload moved FROM these segments TO the hot ones.
+            const _improved = Object.values(_map).filter(s => {
+                return FIELDS.some(f => {
+                    const g = s['g_'+f]||0, b = s['b_'+f]||0;
+                    return g > 0 && b > 0 && ((b-g)/g*100) < -20;
+                });
+            }).map(s => {
+                let bestField = null, bestDelta = 0;
+                FIELDS.forEach(f => {
+                    const g = s['g_'+f]||0, b = s['b_'+f]||0;
+                    if (g > 0) { const d = (b-g)/g*100; if (d < bestDelta) { bestDelta = d; bestField = f; } }
+                });
+                if (!bestField) return null;
+                const _fLabels = { physical_reads:'Physical Reads', logical_reads:'Logical Reads', buffer_gets:'Buffer Gets',
+                    row_lock_waits:'Row Lock Waits', itl_waits:'ITL Waits', buffer_busy_waits:'Buffer Busy',
+                    direct_reads:'Direct Reads', physical_writes:'Physical Writes', table_scans:'Table Scans',
+                    db_block_changes:'DB Block Changes', phys_read_requests:'Phys Read Req',
+                    phys_write_requests:'Phys Write Req', direct_writes:'Direct Writes', unoptimized_reads:'Unoptimized Reads' };
+                return {
+                    object_name: s.object_name, object_type: s.object_type||'', owner: s.owner||'',
+                    _improveField: bestField, _improveLabel: _fLabels[bestField]||bestField,
+                    _improveDelta: Math.round(bestDelta), _improveG: s['g_'+bestField]||0, _improveB: s['b_'+bestField]||0,
+                    _isLinked: _vt.has((s.object_name||'').toUpperCase()),
+                };
+            }).filter(Boolean)
+              .sort((a,b) => a._improveDelta - b._improveDelta)
+              .slice(0, 6);
+            window._hsImproved = _improved;
+
+            // ── TIER-BASED RE-SORT ─────────────────────────────────────────────────────
+            // Culprit SQL tables are always pinned first (Tier 1), then strictly by the
+            // priority score (which already folds in the product boost and the internal-
+            // symptom penalty). Rank then always matches the visible priority number.
+            _all.sort((a,b) => {
+                if (a._isCulprit && !b._isCulprit) return -1;
+                if (!a._isCulprit && b._isCulprit) return 1;
+                return b._priorityScore - a._priorityScore;
+            });
+
             // Summary stats
             const _crit = _all.filter(s=>s._sev==='critical').length;
             const _high = _all.filter(s=>s._sev==='high').length;
             const _stableHot = _all.filter(s=>s._isStableHot).length;
+            const _culpritCt = _all.filter(s=>s._isCulprit).length;
+            const _outlierCt = _all.filter(s=>s._isOutlier).length;
+            const _productCt = _all.filter(s=>s._isProduct).length;
+            const _internalSymCt = _all.filter(s=>s._isInternalSymptom).length;
             const _topCat = (() => { const c={}; _all.forEach(s=>{c[s._cat]=(c[s._cat]||0)+1}); return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]; })();
-            const _bigDelta = _all[0];
+            const _bigDelta = _all.find(s=>!s._isCulprit) || _all[0]; // biggest non-culprit delta for stat card
             const _catLabels = { concurrency:'Concurrency', io:'I/O Pressure', itl:'ITL Contention', logical_io:'Logical I/O', write_pressure:'Write Pressure', stable_hot:'Stable Hot' };
             const _confCol = {High:{c:'#f43f5e',bg:'rgba(244,63,94,0.12)'},Medium:{c:'#f59e0b',bg:'rgba(245,158,11,0.10)'},Low:{c:'#64748b',bg:'rgba(255,255,255,0.05)'}};
             const _sevCol = {critical:'#f43f5e',high:'#f59e0b',moderate:'#64748b'};
@@ -33442,33 +34026,120 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                         <div style="font-size:0.7rem;color:#475569;margin-top:2px">${_topCat?_topCat[1]+' segments affected':'—'}</div>
                     </div>
                     <div style="background:rgba(139,92,246,0.05);border:1px solid rgba(139,92,246,0.12);border-radius:8px;padding:12px 14px">
-                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px">Biggest Delta</div>
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px">Max Regression</div>
                         <div style="font-size:1.1rem;font-weight:800;color:#a855f7">${_bigDelta?(_bigDelta._maxDelta>=9999?'NEW':('▲'+Math.round(_bigDelta._maxDelta)+'%')):'—'}</div>
                         <div style="font-size:0.7rem;color:#475569;margin-top:2px">${_bigDelta?esc(_bigDelta.object_name):'—'}</div>
                     </div>
+                    ${_productCt>0?`<div style="background:linear-gradient(135deg,rgba(245,158,11,0.1),rgba(251,191,36,0.04));border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px"><span style="color:#fbbf24">◆</span> Product Tables</div>
+                        <div style="font-size:1.5rem;font-weight:800;color:#fbbf24;text-shadow:0 0 12px rgba(251,191,36,0.3)">${_productCt}</div>
+                        <div style="font-size:0.7rem;color:#94a3b8;margin-top:2px;font-weight:600">${_productSchema?esc(_productSchema):'application'} schema · primary focus</div>
+                    </div>`:''}
+                    ${_culpritCt>0?`<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:12px 14px">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px">Culprit Tables</div>
+                        <div style="font-size:1.5rem;font-weight:800;color:#f59e0b;text-shadow:0 0 12px rgba(245,158,11,0.3)">${_culpritCt}</div>
+                        <div style="font-size:0.7rem;color:#475569;margin-top:2px">linked to RCA SQL</div>
+                    </div>`:''}
+                    ${_outlierCt>0?`<div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.18);border-radius:8px;padding:12px 14px">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px">Stat. Outliers</div>
+                        <div style="font-size:1.5rem;font-weight:800;color:#a855f7">${_outlierCt}</div>
+                        <div style="font-size:0.7rem;color:#475569;margin-top:2px">extreme delta vs peers</div>
+                    </div>`:''}
                     ${_stableHot>0?`<div style="background:rgba(100,116,139,0.06);border:1px solid rgba(100,116,139,0.15);border-radius:8px;padding:12px 14px">
                         <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px">Chronic Hot</div>
                         <div style="font-size:1.5rem;font-weight:800;color:#94a3b8">${_stableHot}</div>
                         <div style="font-size:0.7rem;color:#475569;margin-top:2px">stable but high activity</div>
                     </div>`:''}
                 </div>`;
+                // Rank strictly follows _priorityScore (which already includes the +product
+                // boost and the −internal-symptom penalty), so #1 is always the highest-
+                // priority row in its section. Ties break product-first, then by %total.
+                // ── Active in-section sort (driven by the header "Sort" dropdown) ────
+                // The chosen sort actually reorders rows WITHIN each section AND the section
+                // order, so "Δ% Highest" really sorts by the dominant-metric change. Default is
+                // delta (truly-new ranks highest — biggest possible change). Ties always break
+                // product-first, then by %total, keeping the ordering math defensible.
+                const _sortKey = window._hsCurSort || 'score';
+                const _dir = ((window._hsSortDir || (_sortKey === 'name' ? 'asc' : 'desc')) === 'asc') ? -1 : 1;
+                const _tieBreak = (a,b) => (a._isProduct !== b._isProduct) ? (a._isProduct ? -1 : 1) : (b._maxPct||0) - (a._maxPct||0);
+                const _byPriority = (a,b) => { const dp = (b._priorityScore||0) - (a._priorityScore||0); return dp !== 0 ? dp : _tieBreak(a,b); };
+                // Delta-sort value: a truly-new segment has no baseline (∞ %-change), so rank it by
+                // ABSOLUTE impact (0→12M matters, 0→950 does not) instead of floating it to the top.
+                const _deltaVal = s => s._isTrulyNew ? ((s._impactNorm||0) * 400) : (s._domDeltaRaw == null ? -Infinity : s._domDeltaRaw);
+                const _byDelta = (a,b) => { const va = _deltaVal(a), vb = _deltaVal(b); return va !== vb ? (vb > va ? 1 : -1) : _tieBreak(a,b); };
+                const _byPct = (a,b) => { const d = (b._maxPct||0) - (a._maxPct||0); return d !== 0 ? d : _tieBreak(a,b); };
+                const _byName = (a,b) => (a.object_name||'').localeCompare(b.object_name||'');
+                const _baseCmp = _sortKey === 'delta' ? _byDelta
+                               : _sortKey === 'pct'   ? _byPct
+                               : _sortKey === 'name'  ? _byName
+                               : _byPriority;
+                // Direction flips the whole comparator (column-header toggle). Default desc.
+                const _sectionCmp = (a,b) => _dir * _baseCmp(a,b);
+                // Separate culprit-pinned entries from the rest for tiered rendering
+                const _pinnedE  = entries.filter(s => s._isCulprit).sort(_sectionCmp);
+                const _regularE = entries.filter(s => !s._isCulprit);
+                // ── Route every regular segment into exactly ONE basket ──────────────
+                // Strict, mutually-exclusive classification (fixes the duplicate-row bug where
+                // a stable-hot segment that also gained a new minor counter matched BOTH the
+                // NEW and CHRONIC filters). Precedence: System → New → Chronic → Regression.
+                const _t2New = [], _t2Regr = [], _t2Stable = [], _t2System = [];
+                _regularE.forEach(s => {
+                    if (s._isSystem)                        { _t2System.push(s); return; }
+                    if (s._isTrulyNew)                      { _t2New.push(s);    return; }
+                    if (s._isStableHot || s._maxDelta <= 5) { _t2Stable.push(s); return; }
+                    _t2Regr.push(s);
+                });
+                [_t2New, _t2Regr, _t2Stable, _t2System].forEach(a => a.sort(_sectionCmp));
+                // Per-section rank (each sub-section already sorted by the active sort) — the
+                // #N badge is relative to the segment's own group, independent of global order.
+                [_pinnedE, _t2New, _t2Regr, _t2Stable, _t2System].forEach(arr => arr.forEach((s,i) => s._sectionRank = i+1));
+                // Order the application sub-sections by the SAME metric the rows are sorted by
+                // (delta → biggest change first, pct → biggest share first, else priority), so
+                // the leading group stays consistent with the chosen sort. System basket last.
+                const _secMetric = _sortKey === 'delta'
+                        ? (arr => arr.reduce((m,s) => Math.max(m, _deltaVal(s)), -Infinity))
+                        : _sortKey === 'pct'
+                        ? (arr => arr.reduce((m,s) => Math.max(m, s._maxPct||0), -1))
+                        : (arr => arr.reduce((m,s) => Math.max(m, s._priorityScore||0), -1));
+                const _tier2Order = [
+                    { k:'new',    entries:_t2New },
+                    { k:'regr',   entries:_t2Regr },
+                    { k:'stable', entries:_t2Stable },
+                ].filter(b => b.entries.length > 0).sort((a,b) => _dir * (_secMetric(b.entries) - _secMetric(a.entries)));
+                if (_t2System.length) _tier2Order.push({ k:'system', entries:_t2System });
+                const _orderedEntries = [..._pinnedE, ..._tier2Order.flatMap(b => b.entries)];
+                const _bPinned = _pinnedE.length;
+
                 // Table
-                const tRows = entries.map((s,i) => {
+                const tRows = _orderedEntries.map((s,i) => {
                     const sc = _sevCol[s._sev]||'#64748b';
+                    const _culpritBorder = s._isCulprit ? '#f59e0b' : sc;
                     const cc = _confCol[s._diag.conf]||_confCol.Low;
                     const topMetric = s._metrics[0];
-                    // Bug3 fix: raw delta for display — null/9999 = NEW
-                    const _rawD = s._maxDeltaRaw?.dRaw;
-                    const _isNew = _rawD === null || s._maxDelta >= 9999;
+                    // Δ% shows the DOMINANT metric's change (the segment's real story); "NEW"
+                    // is reserved for segments absent from the baseline entirely — not for an
+                    // existing segment that merely gained a minor new counter.
+                    const _isNew = s._isTrulyNew;
+                    const _rawD = _isNew ? null : (s._domDeltaRaw == null ? 0 : s._domDeltaRaw);
                     const dTxt = _isNew ? 'NEW' : _dTxt(_rawD);
                     const dCol = _isNew ? '#10b981' : _dCol(_rawD);
-                    // Bug1+ImpB fix: NEW segments get pill; chronic segments use %tot as bar
-                    const _usesPctBar = s._isStableHot && s._maxDelta < 15;
-                    const barW = _isNew ? 0 : (_usesPctBar ? Math.min(Math.round(s._maxPct),100) : Math.min(Math.round(Math.min(s._maxDelta,300)/_maxD*100),100));
-                    const barCol = _isNew ? '#10b981' : (s._maxDelta>100?'#f43f5e':s._maxDelta>50?'#f97316':(_usesPctBar?'#94a3b8':'#f59e0b'));
+                    // Display magnitude uses the dominant-metric delta (not _maxDelta, which an
+                    // incidental new minor counter can inflate to the NEW sentinel). Chronic
+                    // segments show %total as the bar.
+                    const _dispDelta = _isNew ? 9999 : Math.abs(_rawD || 0);
+                    const _usesPctBar = s._isStableHot && _dispDelta < 15;
+                    const barW = _isNew ? 0 : (_usesPctBar ? Math.min(Math.round(s._maxPct),100) : Math.min(Math.round(Math.min(_dispDelta,300)/_maxD*100),100));
+                    const barCol = _isNew ? '#10b981' : (_dispDelta>100?'#f43f5e':_dispDelta>50?'#f97316':(_usesPctBar?'#94a3b8':'#f59e0b'));
                     const catLabel = _catLabels[s._cat]||s._cat;
                     const catCol = s._cat==='itl'?'#a855f7':s._cat==='concurrency'?'#f43f5e':s._cat==='write_pressure'?'#fb923c':s._cat==='logical_io'?'#38bdf8':s._cat==='stable_hot'?'#64748b':'#f59e0b';
-                    const tags = s._cats.map(t=>`<span style="font-size:0.6rem;padding:1px 5px;border-radius:4px;background:${t.c}14;color:${t.c};border:1px solid ${t.c}25;font-weight:600">${t.t}</span>`).join(' ');
+                    // Tags: add OUTLIER badge and CULPRIT badge as needed
+                    const _baseTags = s._cats.map(t=>`<span style="font-size:0.6rem;padding:1px 5px;border-radius:4px;background:${t.c}14;color:${t.c};border:1px solid ${t.c}25;font-weight:600">${t.t}</span>`).join(' ');
+                    const _outlierBadge = s._isOutlier ? `<span style="font-size:0.6rem;padding:1px 6px;border-radius:4px;background:rgba(168,85,247,0.14);color:#a855f7;border:1px solid rgba(168,85,247,0.3);font-weight:700;letter-spacing:0.04em" title="Statistical outlier: delta exceeds IQR fence for this segment population">OUTLIER</span>` : '';
+                    const _culpritBadge = s._isCulprit ? `<span style="font-size:0.6rem;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.14);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);font-weight:700;letter-spacing:0.04em" title="Segment belongs to a table accessed by the identified culprit SQL">🎯 CULPRIT</span>` : '';
+                    const _prodBadge = s._isProduct ? `<span title="Product-schema table (${esc(_productSchema||'application')}) — primary application object, prioritise remediation here" style="font-size:0.6rem;padding:1px 6px;border-radius:4px;background:rgba(251,191,36,0.14);color:#fbbf24;border:1px solid rgba(251,191,36,0.32);font-weight:800;letter-spacing:0.04em">◆ PRODUCT</span>` : '';
+                    const _secBadge = s._isSecondarySymptom ? `<span title="Dictionary or framework object — contention here is usually a SECONDARY SYMPTOM of application workload, not the root cause. Fix the application table driving it." style="font-size:0.6rem;padding:1px 6px;border-radius:4px;background:rgba(100,116,139,0.12);color:#64748b;border:1px solid rgba(100,116,139,0.28);font-weight:700;letter-spacing:0.03em">SECONDARY</span>` : '';
+                    // The RCA·LINKED root-cause badge renders inline beside the segment name (below).
+                    const tags = [_prodBadge, _culpritBadge, _secBadge, _outlierBadge, _baseTags].filter(Boolean).join(' ');
                     const rowId = 'hs-row-'+i;
                     const causeSummary = s._diag.causes.length ? s._diag.causes[0] : '—';
                     // %total pill for dominant metric
@@ -33507,14 +34178,55 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                         <div style="position:relative;margin-top:4px"><pre id="${diagQId}" style="font-family:monospace;font-size:10px;color:#cbd5e1;background:#0f172a;padding:8px 10px;border-radius:5px;border:1px solid #1e293b;white-space:pre-wrap;line-height:1.5;margin:0">${esc(s._diag._diagQuery)}</pre>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('${diagQId}').innerText);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" style="position:absolute;top:4px;right:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;padding:1px 6px;border-radius:3px;font-size:9px;cursor:pointer">Copy</button></div>
                         </details></div>` : '';
-                    return `<tr onclick="var d=document.getElementById('${rowId}');d.style.display=d.style.display==='none'?'table-row':'none'" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s" onmouseenter="this.style.background='rgba(255,255,255,0.02)'" onmouseleave="this.style.background='transparent'">
+                    // SQL linkage block — surfaces the regressed SQL that touches this segment.
+                    // Strength: CAUSAL (>20% DB) red · STRONG (>5%) orange · CORRELATED slate.
+                    const _sqlLinkHtml = (s._sqlLinks && s._sqlLinks.length) ? (() => {
+                        const _strCol = st => st==='CAUSAL'?'#f43f5e':st==='STRONG'?'#fb923c':'#64748b';
+                        const _links = s._sqlLinks.slice().sort((a,b)=>(b.pctDb||0)-(a.pctDb||0)).slice(0,4);
+                        const linkRows = _links.map(l => {
+                            const col = _strCol(l.strength);
+                            const sid = esc(l.sqlId||'—');
+                            const pct = l.pctDb ? Math.round(l.pctDb)+'% DB' : '';
+                            return `<div onclick="event.stopPropagation();switchTab('sql');setTimeout(()=>{const r=document.querySelector('tr[data-sqlid=&quot;${l.sqlId||''}&quot;]');if(r){r.scrollIntoView({behavior:'smooth',block:'center'});r.style.background='rgba(56,189,248,0.18)';setTimeout(()=>r.style.background='',3000);}},300)" style="display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer" title="Open this SQL in SQL Analysis">
+                                <span style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 6px ${col}80;flex-shrink:0"></span>
+                                <span style="font-family:monospace;font-size:0.72rem;color:#38bdf8;font-weight:700">${sid}</span>
+                                ${pct?`<span style="font-size:0.62rem;color:#94a3b8;font-family:monospace">${pct}</span>`:''}
+                                <span style="font-size:0.54rem;font-weight:800;letter-spacing:0.04em;color:${col};border:1px solid ${col}40;background:${col}14;padding:0 5px;border-radius:3px">${l.strength||'CORRELATED'}</span>
+                                ${l.verdict?`<span style="font-size:0.6rem;color:#64748b">${esc(l.verdict)}</span>`:''}
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-top:6px;padding:7px 10px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.14);border-radius:5px">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+                                <span style="font-size:0.62rem;color:#38bdf8;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">⚡ Linked SQL (${s._sqlLinks.length})</span>
+                                <span onclick="event.stopPropagation();switchTab('sql')" style="font-size:0.6rem;color:#818cf8;cursor:pointer;text-decoration:underline;text-underline-offset:2px">see SQL Analysis →</span>
+                            </div>
+                            ${linkRows}
+                            <div style="font-size:0.57rem;color:#475569;margin-top:4px;line-height:1.4"><span style="color:#f43f5e">● CAUSAL</span> &gt;20% DB · <span style="color:#fb923c">● STRONG</span> &gt;5% · <span style="color:#64748b">● CORRELATED</span> — SQL that reads/writes this segment</div>
+                        </div>`;
+                    })() : '';
+                    // Culprit rows get a special row background tint and left-border glow
+                    // Rank within the segment's own section (#1 = top priority in that group)
+                    const _rank = s._sectionRank || (i+1);
+                    const _rankCol = _rank===1?'#f43f5e':_rank===2?'#fb923c':_rank===3?'#fbbf24':'#475569';
+                    const _rankBg  = _rank<=3?`${_rankCol}1f`:'rgba(30,41,59,0.5)';
+                    const _rankBadge = `<span title="Rank #${_rank} in this section by priority" style="display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 3px;border-radius:5px;font-family:monospace;font-size:0.6rem;font-weight:800;flex-shrink:0;background:${_rankBg};color:${_rankCol};border:1px solid ${_rankCol}40">${_rank}</span>`;
+                    // Priority score (regression + product boost − internal-symptom demotion)
+                    const _pscore = Math.min(s._priorityScore||0, 100);
+                    const _pscoreCol = _pscore>=70?'#f43f5e':_pscore>=45?'#f59e0b':_pscore>=25?'#38bdf8':'#64748b';
+                    // Row tint: culprit (amber) > product (subtle gold) > none
+                    const _rowBg = s._isCulprit ? 'rgba(245,158,11,0.04)' : (s._isProduct ? 'rgba(251,191,36,0.025)' : 'transparent');
+                    const _rowHover = s._isCulprit ? 'rgba(245,158,11,0.07)' : 'rgba(255,255,255,0.02)';
+                    const _leftBorder = s._isCulprit ? ';border-left:2px solid rgba(245,158,11,0.5)' : (s._isProduct ? ';border-left:2px solid rgba(251,191,36,0.32)' : (s._isSecondarySymptom ? ';border-left:2px solid rgba(100,116,139,0.25)' : ''));
+                    return `<tr onclick="var d=document.getElementById('${rowId}');d.style.display=d.style.display==='none'?'table-row':'none'" style="cursor:pointer;border-bottom:1px solid rgba(148,163,184,0.13);transition:background 0.15s;background:${_rowBg}${_leftBorder}${s._isLowImpactNew?';opacity:0.5':''}" onmouseenter="this.style.background='${_rowHover}'" onmouseleave="this.style.background='${_rowBg}'">
                         <td style="padding:10px 12px;white-space:nowrap">
-                            <div style="display:flex;align-items:center;gap:6px">
-                                <span style="width:3px;height:20px;border-radius:2px;background:${sc};flex-shrink:0;box-shadow:0 0 6px ${sc}40"></span>
+                            <div style="display:flex;align-items:center;gap:7px">
+                                ${_rankBadge}
+                                <span style="width:3px;height:20px;border-radius:2px;background:${_culpritBorder};flex-shrink:0;box-shadow:0 0 8px ${_culpritBorder}60"></span>
                                 <div>
                                     <span style="color:#f1f5f9;font-weight:700;font-size:0.85rem">${esc(s.object_name)}</span>
+                                    ${s._isDrainer?`<span class="hs-drain-flash" title="RCA root cause — the highest-impact segment by the priority math (regression magnitude + %total contention share + active waits + product weight). Remediation here reclaims the most DB time." style="font-size:0.56rem;padding:2px 7px;border-radius:4px;background:#f43f5e;color:#fff;border:1px solid #fda4af;font-weight:800;letter-spacing:0.05em;margin-left:7px;white-space:nowrap;vertical-align:middle">⚡ RCA LINKED</span>`:''}
                                     ${s.object_type?`<span style="font-size:0.62rem;padding:1px 5px;border-radius:9999px;background:${s.object_type==='INDEX'?'rgba(96,165,250,0.1)':'rgba(255,255,255,0.04)'};color:${s.object_type==='INDEX'?'#60a5fa':'#64748b'};margin-left:4px">${s.object_type}</span>`:''}
-                                    ${s.owner?`<div style="font-size:0.6rem;color:#475569;margin-top:1px;font-weight:500">${esc(s.owner)}</div>`:''}
+                                    ${s.owner?`<div style="font-size:0.6rem;color:${s._isProduct?'#fbbf24':s._isSystem?'#475569':'#64748b'};margin-top:1px;font-weight:${s._isProduct?'700':'500'}">${esc(s.owner)}${s._isProduct?' ◆':''}</div>`:''}
                                 </div>
                             </div>
                         </td>
@@ -33535,7 +34247,10 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                             ? `<span style="font-size:0.78rem;font-weight:800;color:#10b981">NEW</span>`
                             : `<span style="font-family:monospace;font-size:0.82rem;font-weight:800;color:${dCol};${Math.abs(_rawD||0)>100?'text-shadow:0 0 6px '+dCol+'40':''}">${dTxt}</span>`}</td>
                         <td style="padding:10px 8px;font-size:0.72rem;color:#cbd5e1;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(causeSummary)}">${causeSummary}</td>
-                        <td style="padding:10px 8px;text-align:center"><span style="font-size:0.62rem;font-weight:800;letter-spacing:0.06em;padding:2px 8px;border-radius:4px;background:${cc.bg};color:${cc.c};border:1px solid ${cc.c}30">${s._diag.conf.toUpperCase()}</span></td>
+                        <td style="padding:10px 8px;text-align:center;white-space:nowrap">
+                            <div title="Priority score: regression severity + product-schema boost − internal-symptom demotion" style="font-family:monospace;font-size:0.92rem;font-weight:800;color:${_pscoreCol};line-height:1.05">${_pscore}<span style="font-size:0.58rem;color:#475569;font-weight:600">/100</span></div>
+                            <span style="font-size:0.56rem;font-weight:800;letter-spacing:0.06em;padding:1px 7px;border-radius:4px;background:${cc.bg};color:${cc.c};border:1px solid ${cc.c}30;margin-top:3px;display:inline-block">${s._diag.conf.toUpperCase()}</span>
+                        </td>
                         <td style="padding:10px 8px;text-align:center;color:#475569;font-size:0.8rem">▼</td>
                     </tr>
                     <tr id="${rowId}" style="display:none">
@@ -33559,37 +34274,133 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                                         <div style="font-size:0.7rem;line-height:1.4">${whyContent||'<span style="color:#475569">No specific triggers</span>'}</div>
                                     </div>
                                     ${typeCtx}
+                                    ${_sqlLinkHtml}
                                     ${waitLinkHtml}
                                     ${diagQueryHtml}
                                 </div>
                             </div>
                         </td>
                     </tr>`;
+                });
+                // tRows is now an array — slice into sections by boundary indices
+                const _tRowsArr = tRows;
+                // Tier 1 banner above the table
+                const _culpritBanner = _pinnedE.length > 0
+                    ? `<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:linear-gradient(90deg,rgba(245,158,11,0.10),rgba(245,158,11,0.03));border-bottom:1px solid rgba(245,158,11,0.22)">
+                        <span style="font-size:1rem">🎯</span>
+                        <div>
+                          <div style="font-size:0.62rem;font-weight:800;letter-spacing:0.1em;color:#f59e0b;text-transform:uppercase">Tier 1 — Culprit SQL Tables</div>
+                          <div style="font-size:0.62rem;color:#92400e;margin-top:1px">${_pinnedE.length} segment${_pinnedE.length>1?'s that are':' that is'} linked to the bottleneck SQL and shows active regression</div>
+                        </div>
+                        <span style="flex:1"></span>
+                        <span style="font-size:0.6rem;color:#64748b;font-style:italic">Tier 2 sub-sections follow</span>
+                      </div>` : '';
+                // Section separator row builder
+                const _mkSepRow = (icon, label, count, unit, accentColor, bg) =>
+                    `<tr><td colspan="9" style="padding:5px 14px;background:${bg};border-top:1px solid ${accentColor}22;border-bottom:1px solid ${accentColor}22">
+                        <span style="font-size:0.6rem;font-weight:800;letter-spacing:0.09em;color:${accentColor};text-transform:uppercase">${icon} ${label}</span>
+                        <span style="font-size:0.6rem;color:#475569;margin-left:8px">${count} ${unit} · ranked by priority</span>
+                      </td></tr>`;
+                const _tierSepRow   = _pinnedE.length > 0 && _regularE.length > 0
+                    ? _mkSepRow('⬇','Tier 2','','segments below',    '#475569','rgba(30,41,59,0.6)') : '';
+                const _newSepRow    = _t2New.length > 0
+                    ? _mkSepRow('🆕','New Workload', _t2New.length,
+                        _t2New.length>1?'segments appeared only in the bad period':'segment appeared only in the bad period',
+                        '#10b981','rgba(16,185,129,0.05)') : '';
+                const _regrSepRow   = _t2Regr.length > 0
+                    ? _mkSepRow('▲','Regressions', _t2Regr.length,
+                        _t2Regr.length>1?'existing segments that got meaningfully worse':'existing segment that got meaningfully worse',
+                        '#f43f5e','rgba(244,63,94,0.04)') : '';
+                const _stableSepRow = _t2Stable.length > 0
+                    ? _mkSepRow('◆','Chronic Hot', _t2Stable.length,
+                        _t2Stable.length>1?'sustained high-activity segments (low delta — baseline load)':'sustained high-activity segment (low delta — baseline load)',
+                        '#94a3b8','rgba(100,116,139,0.05)') : '';
+                const _systemSepRow = _t2System.length > 0
+                    ? _mkSepRow('⚙','System / Infrastructure', _t2System.length,
+                        _t2System.length>1?'dictionary / framework segments — secondary symptoms, not the application root cause':'dictionary / framework segment — secondary symptom, not the application root cause',
+                        '#64748b','rgba(100,116,139,0.04)') : '';
+                // Emit Tier-2 sections in the adaptive (most-critical-first) order, each
+                // preceded by its own separator. Offset tracks position within _tRowsArr.
+                const _sepByKey = { new:_newSepRow, regr:_regrSepRow, stable:_stableSepRow, system:_systemSepRow };
+                let _t2Off = _bPinned;
+                const _tier2Html = _tier2Order.map(b => {
+                    const _secRows = _tRowsArr.slice(_t2Off, _t2Off + b.entries.length).join('');
+                    _t2Off += b.entries.length;
+                    return (_sepByKey[b.k] || '') + _secRows;
                 }).join('');
+
+                const _arrowFor = key => _sortKey !== key
+                    ? '<span style="color:#334155;margin-left:4px;font-size:0.6rem">⇅</span>'
+                    : `<span style="color:#38bdf8;margin-left:4px;font-size:0.64rem">${_dir<0?'▲':'▼'}</span>`;
+                const _sortTh = (key,label) => `<span onclick="event.stopPropagation();_hsSort('${key}')" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center" title="Click to sort by ${label}">${label}${_arrowFor(key)}</span>`;
+                const _thBase = 'color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em';
                 const tblHtml = `<div style="overflow-x:auto;padding:0 4px">
-                    <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
-                        <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
-                            <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Segment</th>
-                            <th style="padding:8px 8px;text-align:left;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Category</th>
-                            <th style="padding:8px 8px;text-align:left;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Tags</th>
-                            <th style="padding:8px 8px;text-align:right;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Good → Bad</th>
-                            <th style="padding:8px 8px;text-align:left;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Delta</th>
-                            <th style="padding:8px 8px;text-align:right;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Δ%</th>
-                            <th style="padding:8px 8px;text-align:left;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Suspected Cause</th>
-                            <th style="padding:8px 8px;text-align:center;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Conf</th>
-                            <th style="padding:8px 8px;text-align:center;color:#64748b;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em"></th>
+                    ${_culpritBanner}
+                    <table class="hs-main-table" style="width:100%;border-collapse:collapse;font-size:0.8rem">
+                        <thead><tr style="border-bottom:2px solid rgba(148,163,184,0.22)">
+                            <th style="padding:8px 12px;text-align:left;${_thBase}">${_sortTh('name','Segment')}</th>
+                            <th style="padding:8px 8px;text-align:left;${_thBase}">Category</th>
+                            <th style="padding:8px 8px;text-align:left;${_thBase}">Tags</th>
+                            <th style="padding:8px 8px;text-align:right;${_thBase}">${_sortTh('pct','Good → Bad')}</th>
+                            <th style="padding:8px 8px;text-align:left;${_thBase}">Delta</th>
+                            <th style="padding:8px 8px;text-align:right;${_thBase}">${_sortTh('delta','Δ%')}</th>
+                            <th style="padding:8px 8px;text-align:left;${_thBase}">Suspected Cause</th>
+                            <th style="padding:8px 8px;text-align:center;${_thBase}" title="Priority score (regression + product-schema boost − internal-symptom demotion) over confidence">${_sortTh('score','Priority')}</th>
+                            <th style="padding:8px 8px;text-align:center;${_thBase}"></th>
                         </tr></thead>
-                        <tbody>${tRows}</tbody>
+                        <tbody>
+                          ${_tRowsArr.slice(0, _bPinned).join('')}
+                          ${_tierSepRow}
+                          ${_tier2Html}
+                        </tbody>
                     </table>
                 </div>`;
-                el.innerHTML = sumHtml + tblHtml;
+                // Build improved segments section
+                const _impHtml = (window._hsImproved||[]).length > 0 ? (() => {
+                    const _fmtI = v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : String(Math.round(v));
+                    const rows = (window._hsImproved||[]).map(s => {
+                        const pct = Math.round(s._improveDelta);
+                        const pctColor = '#10d96e';
+                        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+                            <td style="padding:7px 12px;color:#f1f5f9;font-weight:600;font-size:0.8rem">${esc(s.object_name)}
+                                ${s.object_type?`<span style="font-size:0.6rem;color:#64748b;margin-left:4px">${s.object_type}</span>`:''}
+                                ${s._isLinked?`<span style="font-size:0.6rem;color:#f59e0b;margin-left:4px">⚡ RCA</span>`:''}</td>
+                            <td style="padding:7px 8px;color:#64748b;font-size:0.75rem">${s._improveLabel}</td>
+                            <td style="padding:7px 8px;font-family:monospace;font-size:0.75rem;color:#64748b;text-align:right">${_fmtI(s._improveG)}</td>
+                            <td style="padding:7px 4px;color:#334155;text-align:center;font-size:0.65rem">→</td>
+                            <td style="padding:7px 8px;font-family:monospace;font-size:0.75rem;color:#f1f5f9;font-weight:700;text-align:right">${_fmtI(s._improveB)}</td>
+                            <td style="padding:7px 10px;font-family:monospace;font-size:0.82rem;font-weight:800;color:${pctColor};text-align:right">${pct}%</td>
+                            <td style="padding:7px 8px;font-size:0.68rem;color:#475569">Activity reduced — may indicate workload shift or fix</td>
+                        </tr>`;
+                    }).join('');
+                    return `<details style="border-top:1px solid rgba(255,255,255,0.04);margin-top:0">
+                        <summary style="padding:8px 16px;font-size:0.65rem;font-weight:700;color:#10d96e;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px">
+                            <span style="color:#10d96e40">▶</span> Improvement Context — ${(window._hsImproved||[]).length} segments that IMPROVED (capacity shift indicator)
+                        </summary>
+                        <div style="padding:0 4px 8px">
+                            <div style="font-size:0.65rem;color:#475569;padding:4px 14px 6px;line-height:1.5">These segments showed meaningful activity reduction in the bad period. If a hot segment is new and these are unchanged, it is new workload. If these and the hot segments share the same schema, the workload may have shifted access patterns.</div>
+                            <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+                                <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+                                    <th style="padding:5px 12px;text-align:left;color:#64748b;font-size:0.65rem;font-weight:700;text-transform:uppercase">Segment</th>
+                                    <th style="padding:5px 8px;text-align:left;color:#64748b;font-size:0.65rem;font-weight:700;text-transform:uppercase">Metric</th>
+                                    <th style="padding:5px 8px;text-align:right;color:#64748b;font-size:0.65rem;font-weight:700;text-transform:uppercase" colspan="3">Good → Bad</th>
+                                    <th style="padding:5px 10px;text-align:right;color:#64748b;font-size:0.65rem;font-weight:700;text-transform:uppercase">Δ%</th>
+                                    <th style="padding:5px 8px;text-align:left;color:#64748b;font-size:0.65rem;font-weight:700;text-transform:uppercase">Note</th>
+                                </tr></thead>
+                                <tbody>${rows}</tbody>
+                            </table>
+                        </div>
+                    </details>`;
+                })() : '';
+                el.innerHTML = sumHtml + tblHtml + _impHtml;
             };
             // Filter + sort + severity gate
             window._hsAllData = _all;
             window._hsRender = _render;
             window._hsCurFilter = 'all';
             window._hsCurSev = 'high+medium'; // default: high + medium confidence
-            window._hsCurSort = 'confidence'; // default: confidence priority
+            window._hsCurSort = 'score'; // default: Most Problematic (priority) — highest-impact segment leads
+            window._hsSortDir = 'desc';
 
             // Populate category filter dropdown with counts
             const _catSel = document.getElementById('hs-cat-filter');
@@ -33598,8 +34409,11 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                 _all.forEach(s => { _catCounts[s._cat] = (_catCounts[s._cat]||0) + 1; });
                 const _rcaCount = _all.filter(s => s._isLinked).length;
                 const _shCount = _all.filter(s => s._isStableHot).length;
+                const _prodCount = _all.filter(s => s._isProduct).length;
+                const _internalCount = _all.filter(s => s._isInternalSymptom).length;
                 const _catOpts = [
                     { v:'all', l:'All Categories', n:_all.length },
+                    { v:'product', l:'◆ Product Tables', n:_prodCount },
                     { v:'concurrency', l:'Concurrency', n:_catCounts.concurrency||0 },
                     { v:'io', l:'I/O Pressure', n:_catCounts.io||0 },
                     { v:'logical_io', l:'Logical I/O', n:_catCounts.logical_io||0 },
@@ -33607,6 +34421,7 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                     { v:'write_pressure', l:'Write Pressure', n:_catCounts.write_pressure||0 },
                     { v:'stable_hot', l:'Stable Hot', n:_shCount },
                     { v:'rca', l:'RCA Linked', n:_rcaCount },
+                    { v:'internal', l:'Internal Symptoms', n:_internalCount },
                 ];
                 _catSel.innerHTML = _catOpts
                     .filter(o => o.v === 'all' || o.n > 0)
@@ -33665,17 +34480,24 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                 if (sort === 'confidence') _sortByConfidence(d);
                 else if (sort === 'severity') _sortBySeverity(d);
                 else if (sort === 'delta') d.sort((a,b) => b._maxDelta - a._maxDelta);
-                else if (sort === 'score') d.sort((a,b) => b._score - a._score);
+                else if (sort === 'score') d.sort((a,b) => { if (a._isCulprit && !b._isCulprit) return -1; if (!a._isCulprit && b._isCulprit) return 1; return (b._priorityScore||0) - (a._priorityScore||0); });
                 else if (sort === 'pct') d.sort((a,b) => b._maxPct - a._maxPct);
                 else if (sort === 'name') d.sort((a,b) => (a.object_name||'').localeCompare(b.object_name||''));
                 // Category filter
-                if (cat !== 'all') d = cat==='rca'?d.filter(s=>s._isLinked):cat==='stable_hot'?d.filter(s=>s._isStableHot):d.filter(s=>s._cat===cat);
+                if (cat !== 'all') d = cat==='rca'?d.filter(s=>s._isLinked):cat==='stable_hot'?d.filter(s=>s._isStableHot):cat==='product'?d.filter(s=>s._isProduct):cat==='internal'?d.filter(s=>s._isInternalSymptom):d.filter(s=>s._cat===cat);
                 // Confidence filter
                 if (sev === 'high') d = d.filter(s=>s._diag.conf==='High');
                 else if (sev === 'high+medium') d = d.filter(s=>s._diag.conf==='High'||s._diag.conf==='Medium');
                 else if (sev === 'medium') d = d.filter(s=>s._diag.conf==='Medium');
                 else if (sev === 'low') d = d.filter(s=>s._diag.conf==='Low');
                 // 'all_conf' = no confidence filter
+                // Focus mode: collapse the long tail to the genuinely high-impact rows.
+                // Always keeps culprits + product tables; otherwise requires a meaningful
+                // delta-driven priority and excludes chronic (no-delta) baseline segments.
+                if (window._hsImportantOnly) {
+                    const _focused = d.filter(s => s._isCulprit || s._isProduct || ((s._priorityScore||0) >= 40 && !s._isStableHot));
+                    if (_focused.length) d = _focused; // never blank the panel
+                }
                 _updateCountBadge(d.length);
                 window._hsRender(d);
             };
@@ -33688,8 +34510,46 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                 window._hsApplyFilters();
             };
             window._hsSort = function(mode) {
-                window._hsCurSort = mode;
+                // Clicking the active column toggles direction; switching column resets to a
+                // sensible default (high-first for metrics, A→Z for name).
+                if (window._hsCurSort === mode) {
+                    window._hsSortDir = (window._hsSortDir === 'asc') ? 'desc' : 'asc';
+                } else {
+                    window._hsCurSort = mode;
+                    window._hsSortDir = (mode === 'name') ? 'asc' : 'desc';
+                }
+                const _sel = document.getElementById('hs-sort');
+                if (_sel && _sel.value !== mode) _sel.value = mode;
                 window._hsApplyFilters();
+            };
+            window._hsImportantOnly = true;  // default ON — open on the critical segments
+            window._hsDense = true;          // default ON — compact tabular density
+            // Focus toggle — show only high-impact segments (delta/priority driven)
+            window._hsToggleImportant = function() {
+                window._hsImportantOnly = !window._hsImportantOnly;
+                const b = document.getElementById('hs-focus-btn');
+                if (b) {
+                    b.style.color = window._hsImportantOnly ? '#fbbf24' : '#94a3b8';
+                    b.style.borderColor = window._hsImportantOnly ? 'rgba(251,191,36,0.55)' : '#334155';
+                    b.style.background = window._hsImportantOnly ? 'rgba(251,191,36,0.10)' : '#0f172a';
+                    b.textContent = window._hsImportantOnly ? '⊙ Focus · On' : '⊙ Focus · Off';
+                    b.setAttribute('aria-pressed', window._hsImportantOnly ? 'true' : 'false');
+                }
+                window._hsApplyFilters();
+            };
+            // Compact density toggle — squeeze rows into a tighter tabular layout
+            window._hsToggleDense = function() {
+                window._hsDense = !window._hsDense;
+                const cont = document.getElementById('hot-segments-comparison');
+                if (cont) cont.classList.toggle('hs-dense', window._hsDense);
+                const b = document.getElementById('hs-dense-btn');
+                if (b) {
+                    b.style.color = window._hsDense ? '#38bdf8' : '#94a3b8';
+                    b.style.borderColor = window._hsDense ? 'rgba(56,189,248,0.55)' : '#334155';
+                    b.style.background = window._hsDense ? 'rgba(56,189,248,0.10)' : '#0f172a';
+                    b.textContent = window._hsDense ? '⊟ Compact · On' : '⊟ Compact · Off';
+                    b.setAttribute('aria-pressed', window._hsDense ? 'true' : 'false');
+                }
             };
 
             // ── Wire segment intelligence back into verdict engine (ctx._panelInsights) ──
@@ -33709,7 +34569,10 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                     topCategory: _topCat ? _topCat[0] : null,
                     topCategoryCount: _topCat ? _topCat[1] : 0,
                     biggestDelta: _bigDelta ? { name: _bigDelta.object_name, delta: _bigDelta._maxDelta, type: _bigDelta.object_type } : null,
-                    rcaLinked: _all.filter(s=>s._isLinked).map(s=>({ name:s.object_name, type:s.object_type, sev:s._sev, cat:s._cat, maxDelta:s._maxDelta, maxPct:s._maxPct, diag:s._diag.causes[0]||null, sqlLinks:s._sqlLinks.length })),
+                    productSchema: _productSchema,
+                    productTables: _all.filter(s=>s._isProduct).map(s=>({ name:s.object_name, type:s.object_type, sev:s._sev, cat:s._cat, maxDelta:s._maxDelta, maxPct:s._maxPct, priority:s._priorityScore, isCulprit:s._isCulprit, sqlCausal:s._hasSqlCausal })),
+                    internalSymptoms: _all.filter(s=>s._isInternalSymptom).map(s=>({ name:s.object_name, owner:s.owner, cat:s._cat, maxPct:s._maxPct })),
+                    rcaLinked: _all.filter(s=>s._isLinked).map(s=>({ name:s.object_name, type:s.object_type, owner:s.owner, sev:s._sev, cat:s._cat, maxDelta:s._maxDelta, maxPct:s._maxPct, diag:s._diag.causes[0]||null, sqlLinks:s._sqlLinks.length, isProduct:s._isProduct, isInternalSymptom:s._isInternalSymptom, isSecondarySymptom:s._isSecondarySymptom, isSystem:s._isSystem, isSecondaryApp:s._isSecondaryApp, priority:s._priorityScore })).sort((a,b)=>(a.isSecondarySymptom?1:0)-(b.isSecondarySymptom?1:0) || b.priority-a.priority),
                     indexScanAnomalies: _all.filter(s=>s._isIndexScanAnomaly).map(s=>s.object_name),
                     writePressure: _all.filter(s=>s._hasWritePressure).map(s=>({ name:s.object_name, delta:_dNum(s,'physical_writes'), pctTotal:s._pctPW })),
                     bufferBusySegs: _all.filter(s=>(s.b_buffer_busy_waits||0)>0).map(s=>({ name:s.object_name, waits:s.b_buffer_busy_waits, pct:s._pctBB, delta:_dNum(s,'buffer_busy_waits') })),
@@ -33722,9 +34585,10 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                     // Top 5 critical segments with full diagnosis for narrative consumption
                     topFindings: _critSegs.slice(0,5).map(s=>({
                         name: s.object_name, type: s.object_type, owner: s.owner,
-                        sev: s._sev, cat: s._cat, score: s._score,
+                        sev: s._sev, cat: s._cat, score: s._score, priority: s._priorityScore,
                         maxDelta: s._maxDelta, maxPct: s._maxPct,
                         isLinked: s._isLinked, isStableHot: s._isStableHot,
+                        isProduct: s._isProduct, isInternalSymptom: s._isInternalSymptom,
                         sqlCausal: s._hasSqlCausal, sqlLinks: s._sqlLinks.length,
                         causes: s._diag.causes, conf: s._diag.conf,
                         metrics: s._metrics.map(m=>({label:m.label,g:m.g,b:m.b,d:m.d,pct:m.pct}))
@@ -33792,6 +34656,11 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                             physDelta: dPct,
                             linkedSqlId: sqlId,
                             linkedSqlCount: matchedSqls.length,
+                            // Gap E: pure-DML write-path segment growth is already
+                            // explained by the primary verdict (contributing
+                            // factor); query-side growth is an independent
+                            // regression that needs its own remediation.
+                            framing: _mIsPureDML ? 'INCORPORATED' : 'INDEPENDENT',
                             narrative: `${isIndex ? 'Index' : 'Table'} ${seg.object_name} `+
                                 `shows extreme physical read growth (${physG > 0 ? '+'+Math.round(dPct)+'%' : 'NEW'}, `+
                                 `${(physB/1000000).toFixed(1)}M reads) linked to SQL ${sqlId}` +
@@ -33808,12 +34677,16 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                         const _enrichDiv = document.createElement('div');
                         _enrichDiv.style.cssText = 'margin:8px 20px;padding:8px 12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:6px;font-size:10px;color:#d1d5db';
                         _enrichDiv.innerHTML = '<div style=\"font-size:9px;color:#f59e0b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px\">⚡ Segment Intelligence — Post-Verdict Enrichment</div>' +
-                            _verdictEnrichments.map(e =>
-                                '<div style=\"margin:3px 0;padding:3px 0;border-bottom:1px solid rgba(245,158,11,0.12)\">' +
+                            _verdictEnrichments.map(e => {
+                                var _isInc = e.framing === 'INCORPORATED';
+                                var _tag = _isInc
+                                    ? '<span style=\"color:#86efac;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);border-radius:3px;padding:0 5px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-left:4px\">Contributing — already in verdict</span>'
+                                    : '<span style=\"color:#fca5a5;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:3px;padding:0 5px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-left:4px\">Independent — separate action</span>';
+                                return '<div style=\"margin:3px 0;padding:3px 0;border-bottom:1px solid rgba(245,158,11,0.12)\">' +
                                 '<span style=\"color:#f59e0b;font-weight:600\">' + e.segment + '</span> ' +
-                                '<span style=\"color:#94a3b8\">(' + e.objectType + ')</span> — ' +
-                                e.narrative + '</div>'
-                            ).join('');
+                                '<span style=\"color:#94a3b8\">(' + e.objectType + ')</span>' + _tag + ' — ' +
+                                e.narrative + '</div>';
+                            }).join('');
                         // Insert after the main verdict panel
                         const _nextSibling = _enrichTarget.nextElementSibling;
                         if (_nextSibling) _enrichTarget.parentNode.insertBefore(_enrichDiv, _nextSibling);
@@ -33821,11 +34694,17 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                     }
                 }
             }
-            // Default render: confidence-sorted, high + medium conf
-            _sortByConfidence(_all);
-            const _defaultSet = _all.filter(s=>s._diag.conf==='High'||s._diag.conf==='Medium');
-            _updateCountBadge(_defaultSet.length);
-            _render(_defaultSet);
+            // Default view: Focus (high-impact only) + Compact (dense) so the panel opens
+            // straight on the critical segments. Both stay user-toggleable in the header.
+            {
+                const _cont = document.getElementById('hot-segments-comparison');
+                if (_cont) _cont.classList.add('hs-dense');
+                const _fb = document.getElementById('hs-focus-btn');
+                if (_fb) { _fb.style.color='#fbbf24'; _fb.style.borderColor='rgba(251,191,36,0.55)'; _fb.style.background='rgba(251,191,36,0.10)'; _fb.textContent='⊙ Focus · On'; _fb.setAttribute('aria-pressed','true'); }
+                const _db = document.getElementById('hs-dense-btn');
+                if (_db) { _db.style.color='#38bdf8'; _db.style.borderColor='rgba(56,189,248,0.55)'; _db.style.background='rgba(56,189,248,0.10)'; _db.textContent='⊟ Compact · On'; _db.setAttribute('aria-pressed','true'); }
+            }
+            window._hsApplyFilters();
         })();
 
         // Latency chart removed — segment-level analysis provides richer insight
