@@ -1,0 +1,595 @@
+{
+  "cases": [
+    {
+      "id": "gold-a3f58fb647ae14cf",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "CPU",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 95.0,
+        "saturated": true,
+        "top_waits": [
+          "cpu"
+        ],
+        "hash": "a3f58fb647ae14cf"
+      },
+      "verdict_bottleneck": "CPU",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "CPU",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-84837451d1bb4b13",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "db file sequential read"
+        ],
+        "hash": "84837451d1bb4b13"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "I/O",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-7498c14ab717d847",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "db file scattered read"
+        ],
+        "hash": "7498c14ab717d847"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "I/O",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-207233f7544c0e80",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Commit",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "log file sync"
+        ],
+        "hash": "207233f7544c0e80"
+      },
+      "verdict_bottleneck": "Commit",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Commit",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-16e0972106ca4b2e",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Cluster",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "gc buffer busy acquire"
+        ],
+        "hash": "16e0972106ca4b2e"
+      },
+      "verdict_bottleneck": "Cluster",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Cluster",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-3f5fe7b4fe26d8de",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Cluster",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "gc cr block busy"
+        ],
+        "hash": "3f5fe7b4fe26d8de"
+      },
+      "verdict_bottleneck": "Cluster",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Cluster",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-1006272faf3bb5a1",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "buffer busy waits"
+        ],
+        "hash": "1006272faf3bb5a1"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Concurrency",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-373e1b8266a69d17",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "library cache lock"
+        ],
+        "hash": "373e1b8266a69d17"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Concurrency",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-d47e92eef3055ab0",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "latch: shared pool"
+        ],
+        "hash": "d47e92eef3055ab0"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Concurrency",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-b1be5b49577274e6",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "enq: tx - row lock contention"
+        ],
+        "hash": "b1be5b49577274e6"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Concurrency",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-4dac572853cfab0b",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Network",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "sql*net more data to client"
+        ],
+        "hash": "4dac572853cfab0b"
+      },
+      "verdict_bottleneck": "Network",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Network",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "gold-aee4b6a3c2c18dac",
+      "db_name": "GOLDEN",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 0.0,
+        "aas_bad": 0.0,
+        "cpu_capacity_pct": 40.0,
+        "saturated": false,
+        "top_waits": [
+          "resmgr:cpu quantum"
+        ],
+        "hash": "aee4b6a3c2c18dac"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": true,
+      "confirmed_root_cause": "Resource Manager throttling",
+      "source": "golden",
+      "seen": 1,
+      "last_seen": null
+    },
+    {
+      "id": "e936957008d7e560-14386",
+      "db_name": "PRODDB",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "CPU\u2192Concurrency",
+        "dbt_bucket": "extreme",
+        "dbt_pct": 522.2,
+        "aas_bad": 4.67,
+        "cpu_capacity_pct": 29.2,
+        "saturated": false,
+        "top_waits": [
+          "latch: shared pool",
+          "db cpu",
+          "db file sequential read",
+          "buffer busy waits"
+        ],
+        "hash": "e936957008d7e560"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 3,
+      "last_seen": 1782803895.67883
+    },
+    {
+      "id": "92419d09c51afda6-76478",
+      "db_name": "PRNEI77C",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "CPU\u2192I/O",
+        "dbt_bucket": "minor",
+        "dbt_pct": 24.4,
+        "aas_bad": 1.65,
+        "cpu_capacity_pct": 5.2,
+        "saturated": false,
+        "top_waits": [
+          "db file sequential read",
+          "db cpu",
+          "log file sync",
+          "direct path read"
+        ],
+        "hash": "92419d09c51afda6"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 5,
+      "last_seen": 1782823583.647072
+    },
+    {
+      "id": "22c66a5c4ee1b5aa-90645",
+      "db_name": "PRC5TKZX",
+      "signature": {
+        "bottleneck": "CPU",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "flat",
+        "dbt_pct": -39.0,
+        "aas_bad": 0.23,
+        "cpu_capacity_pct": 1.4,
+        "saturated": false,
+        "top_waits": [
+          "db cpu",
+          "log file sync",
+          "sql*net more data to client",
+          "log file sequential read"
+        ],
+        "hash": "22c66a5c4ee1b5aa"
+      },
+      "verdict_bottleneck": "CPU",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1782824590.6454818
+    },
+    {
+      "id": "f3f860a00f4e01bc-39949",
+      "db_name": "ADSPRDDB",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "minor",
+        "dbt_pct": 24.4,
+        "aas_bad": 651.15,
+        "cpu_capacity_pct": 1808.7,
+        "saturated": true,
+        "top_waits": [
+          "free buffer waits",
+          "log file sync",
+          "enq: fb - contention",
+          "buffer busy waits"
+        ],
+        "hash": "f3f860a00f4e01bc"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 10,
+      "last_seen": 1782852363.6458387
+    },
+    {
+      "id": "742aaf5820d7c83b-91401",
+      "db_name": "TS7TS1QF",
+      "signature": {
+        "bottleneck": "Commit",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 78.8,
+        "aas_bad": 11.59,
+        "cpu_capacity_pct": 72.4,
+        "saturated": false,
+        "top_waits": [
+          "log file sync",
+          "db cpu",
+          "direct path read",
+          "enq: ko - fast object checkpoint"
+        ],
+        "hash": "742aaf5820d7c83b"
+      },
+      "verdict_bottleneck": "Commit",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 8,
+      "last_seen": 1782888206.934223
+    },
+    {
+      "id": "62464a5096959043-27440",
+      "db_name": "ADSPRDDB",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "I/O\u2192Concurrency",
+        "dbt_bucket": "major",
+        "dbt_pct": 88.6,
+        "aas_bad": 651.15,
+        "cpu_capacity_pct": 1808.7,
+        "saturated": true,
+        "top_waits": [
+          "free buffer waits",
+          "log file sync",
+          "enq: fb - contention",
+          "buffer busy waits"
+        ],
+        "hash": "62464a5096959043"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 4,
+      "last_seen": 1782849446.6027813
+    },
+    {
+      "id": "16cfb1b87c0b0909-34975",
+      "db_name": "PRJ2WT4D",
+      "signature": {
+        "bottleneck": "Commit",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "flat",
+        "dbt_pct": -44.1,
+        "aas_bad": 9.28,
+        "cpu_capacity_pct": 58.0,
+        "saturated": false,
+        "top_waits": [
+          "log file sync",
+          "db cpu",
+          "direct path read",
+          "enq: ko - fast object checkpoint"
+        ],
+        "hash": "16cfb1b87c0b0909"
+      },
+      "verdict_bottleneck": "Commit",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1782844334.9755516
+    },
+    {
+      "id": "e50c710c217a3121-47860",
+      "db_name": "ALBPRDDB",
+      "signature": {
+        "bottleneck": "Mixed",
+        "severity": "critical",
+        "shift": "CPU\u2192Mixed",
+        "dbt_bucket": "extreme",
+        "dbt_pct": 1102.1,
+        "aas_bad": 303.08,
+        "cpu_capacity_pct": 582.8,
+        "saturated": true,
+        "top_waits": [
+          "enq: hw - contention",
+          "db cpu",
+          "buffer busy waits",
+          "db file sequential read"
+        ],
+        "hash": "e50c710c217a3121"
+      },
+      "verdict_bottleneck": "Mixed",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": true,
+      "seen": 1,
+      "last_seen": 1782886547.8605747
+    },
+    {
+      "id": "fffd49fad7a60d56-23156",
+      "db_name": "PIMPR3DB",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "extreme",
+        "dbt_pct": 359.2,
+        "aas_bad": 45.61,
+        "cpu_capacity_pct": 325.8,
+        "saturated": true,
+        "top_waits": [
+          "free buffer waits",
+          "db cpu",
+          "db file sequential read",
+          "enq: ko - fast object checkpoint"
+        ],
+        "hash": "fffd49fad7a60d56"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1782889923.1566408
+    },
+    {
+      "id": "1570a05d4f84690a-95249",
+      "db_name": "PIMPR3DB",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "extreme",
+        "dbt_pct": 359.2,
+        "aas_bad": 45.61,
+        "cpu_capacity_pct": 325.8,
+        "saturated": true,
+        "top_waits": [
+          "free buffer waits",
+          "px idle wait",
+          "space manager: slave idle wait",
+          "rdbms ipc message"
+        ],
+        "hash": "1570a05d4f84690a"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 3,
+      "last_seen": 1782894889.1266785
+    }
+  ],
+  "updated": 1782894889.1281915
+}

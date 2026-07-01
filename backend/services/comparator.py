@@ -175,6 +175,34 @@ def _is_platform_scheduler(module: str, sql_text: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Generic SQL-type + parallelism detection (any SQL, any AWR pair).
+# Not tied to a specific SQL_ID/table — pure text-shape rules so the same
+# mechanism fires for any future MERGE/INSERT/UPDATE/DELETE with an
+# over-parallelized hint, mirroring how a senior DBA reads the SQL text.
+# ---------------------------------------------------------------------------
+_DML_RE = re.compile(r"^\s*(?:/\*.*?\*/\s*)*(MERGE|INSERT|UPDATE|DELETE)\b", re.IGNORECASE | re.DOTALL)
+# Matches PARALLEL(16), PARALLEL (16), and PARALLEL(table_alias, 16) hint forms.
+_PARALLEL_HINT_RE = re.compile(r"PARALLEL\s*\(\s*(?:[A-Za-z0-9_$#.\"]+\s*,\s*)?(\d+)\s*\)", re.IGNORECASE)
+
+
+def _is_dml(sql_text: str) -> bool:
+    """True if the statement is a data-modifying statement (MERGE/INSERT/UPDATE/
+    DELETE), as opposed to a SELECT. Generic regex on statement shape only —
+    used to prefer DML causality over SELECT when both are candidates for a
+    write-pressure verdict (dirty buffers/checkpoint/DBWR pressure can only be
+    caused by DML, never by a pure read)."""
+    return bool(_DML_RE.match(sql_text or ""))
+
+
+def _parallel_degree(sql_text: str) -> int:
+    """Extract the requested PARALLEL(N) degree from a SQL hint, if any. Returns
+    0 when no PARALLEL hint is present. Generic across any SQL text — does not
+    special-case any particular statement or table."""
+    m = _PARALLEL_HINT_RE.search(sql_text or "")
+    return int(m.group(1)) if m else 0
+
+
 def _is_oracle_maintenance(module: str, sql_text: str) -> bool:
     """IMP2: Detect if a SQL is Oracle internal maintenance."""
     mod = (module or "").strip().lower()
@@ -539,6 +567,17 @@ def _compare_wait_events(
                         f"proportional to workload change, not an independent bottleneck."
                     )
 
+        # Latency-driven regression — independent of volume/share. Total wait time
+        # is occurrences x avg latency, so a latency blowup on a low-occurrence
+        # event stays small in both %DB-time and absolute total-time terms even
+        # though every session that hits it now pays materially more. Without
+        # this signal such an event is silently classified "stable".
+        _latency_material = (
+            latency_increased and bad_avg_ms >= 20.0
+        ) or (
+            bad_avg_ms >= 1000.0 and good_avg_ms > 0 and bad_avg_ms > good_avg_ms * 1.1
+        )
+
         # Classification
         if is_new_dominant:
             classification = "new_bottleneck"
@@ -552,6 +591,10 @@ def _compare_wait_events(
             classification = "worsening"
         elif delta_pct_db_time > 5.0:
             # Absolute pct_db_time spike > 5pp even if relative delta < 100%
+            classification = "worsening"
+        elif _latency_material:
+            # Per-wait latency regressed materially even though volume/share did not
+            # cross the thresholds above — still a real, worsening bottleneck.
             classification = "worsening"
         elif delta_pct < -50.0:
             classification = "improving"
@@ -567,8 +610,12 @@ def _compare_wait_events(
             confidence_signals += 1
         if delta_pct > 100.0:
             confidence_signals += 1
-        if latency_increased:
-            confidence_signals += 1
+        if _latency_material:
+            # A material latency regression is weighted like the other strong
+            # signals — a pure latency blowup (e.g. avg wait doubling into the
+            # hundreds of ms) is just as diagnostic as a volume spike, and must
+            # not be diluted to a single generic point among six signals.
+            confidence_signals += 2 if bad_avg_ms >= 500.0 else 1
         if extreme_wait_flag:
             confidence_signals += 1
         if bad_pct > 20.0:
@@ -754,6 +801,11 @@ def _compare_sql_stats(
         is_maint = _is_oracle_maintenance(sql_module, sql_text)
         source_cat = _classify_source(sql_module, sql_text)
 
+        # Generic SQL-type + parallelism signals (any SQL, any AWR pair)
+        _full_or_trunc_text = sql_text_full or sql_text_truncated_str or sql_text
+        is_dml = _is_dml(_full_or_trunc_text)
+        parallel_degree = _parallel_degree(_full_or_trunc_text)
+
         # IMP3
         plan_verdict = _compute_plan_verdict(plan_changed, good_avg, bad_avg)
 
@@ -835,6 +887,13 @@ def _compare_sql_stats(
         elif tag == "regression":
             severity = "critical" if delta_pct > 500.0 else "warning"
             if plan_changed and "REGRESSED" in plan_verdict and severity != "critical":
+                severity = "critical"
+            # Absolute-impact bump: a relative-delta threshold alone understates risk
+            # when the SQL was already expensive in the baseline (e.g. a large batch
+            # DML that regresses only 2-3x in relative terms but still dominates DB
+            # time in absolute seconds). Generic threshold, not tied to any SQL_ID —
+            # fires for any DML sustaining a large share of every minute of DB time.
+            if severity != "critical" and is_dml and bad_elapsed_per_min >= 20.0:
                 severity = "critical"
         elif tag == "load_increase":
             severity = "warning"
@@ -921,15 +980,21 @@ def _compare_sql_stats(
             wait_absorption=wait_absorption,
             wait_absorption_note=wait_absorption_note,
             sql_action=sql_action,
+            is_dml=is_dml,
+            parallel_degree=parallel_degree,
         ))
 
-    # Phase 4 — Sort regressions by regression_score (log10-weighted priority heap)
-    # This ensures a SQL running 144k times × 40x slower ranks above one running
-    # 10 times × 40x slower, which is the correct triage priority.
+    # Phase 4 — Sort regressions by severity first, then absolute impact
+    # (regression_score, falling back to bad_elapsed_secs). Severity leads so
+    # nothing outranks a critical; impact then decides ordering WITHIN a tier
+    # so a large, high-impact DML regression outranks a smaller "new" SQL of
+    # equal severity — tag category alone is only the final tiebreak.
+    _sev_order = {"critical": 0, "warning": 1, "info": 2}
     _tag_order = {"new_offender": 0, "regression": 1, "load_increase": 2, "improved": 3, "stable": 4}
     regressions.sort(key=lambda r: (
+        _sev_order.get(r.severity, 3),
+        -(r.regression_score if r.regression_score > 0 else r.bad_elapsed_secs),
         _tag_order.get(r.tag, 9),
-        -r.regression_score if r.regression_score > 0 else -r.bad_elapsed_secs,
     ))
     return regressions
 
@@ -1013,11 +1078,35 @@ def _compare_dbwr_activity_stats(
             spike_stat = keyword
             spike_pct = pct
 
+    # DBWR SATURATION RATIO — dirty_buffers_inspected / dbwr_checkpoint_written.
+    # This is the mechanistic proof of write pressure: Oracle scans a dirty
+    # buffer looking for a free slot, finds none, and has to inspect another —
+    # the ratio quantifies how many buffers DBWR had to scan for every one it
+    # actually managed to flush. A ratio near 1.0 means DBWR keeps up; a ratio
+    # of 5-6x (as in a real checkpoint-storm incident) means DBWR is scanning
+    # 5-6 dirty buffers for every one it can write, i.e. badly saturated.
+    # Computed from totals (not rates) so it is independent of window length.
+    _dirty_total_good = stats.get("dirty_buffers_inspected", {}).get("good_total", 0.0)
+    _dirty_total_bad  = stats.get("dirty_buffers_inspected", {}).get("bad_total", 0.0)
+    _written_total_good = stats.get("dbwr_checkpoint_written", {}).get("good_total", 0.0)
+    _written_total_bad  = stats.get("dbwr_checkpoint_written", {}).get("bad_total", 0.0)
+    dirty_to_written_ratio_good = round(_dirty_total_good / _written_total_good, 2) if _written_total_good > 0 else 0.0
+    dirty_to_written_ratio_bad  = round(_dirty_total_bad / _written_total_bad, 2) if _written_total_bad > 0 else 0.0
+    # Material saturation: DBWR is scanning materially more dirty buffers than
+    # it can flush, AND this is worse than (or newly present vs) the baseline.
+    write_pressure_ratio_flag = (
+        dirty_to_written_ratio_bad >= 2.0
+        and (dirty_to_written_ratio_good <= 0 or dirty_to_written_ratio_bad > dirty_to_written_ratio_good * 1.1)
+    )
+
     return {
         "stats": stats,
         "spike_detected": spike_detected,
         "spike_stat":     spike_stat,
         "spike_pct":      round(spike_pct, 1),
+        "dirty_to_written_ratio_good": dirty_to_written_ratio_good,
+        "dirty_to_written_ratio_bad":  dirty_to_written_ratio_bad,
+        "write_pressure_ratio_flag":   write_pressure_ratio_flag,
         "note": (
             f"DBWR write volume spike: '{spike_stat}' rate increased {spike_pct:.0f}% "
             f"({stats.get('dbwr_checkpoint_written',{}).get('good_per_sec',0):.2f}/s → "
@@ -1947,22 +2036,39 @@ def _classify_bottleneck(data: dict) -> str:
     cpu_pct = 0.0
     io_pct = 0.0
     concurrency_pct = 0.0
-    
+    commit_pct = 0.0
+    cluster_pct = 0.0
+    network_pct = 0.0
+
     for ev in events:
         if not isinstance(ev, dict):
             continue
         pct = _float(ev.get("pct_db_time", 0))
         wclass = (ev.get("wait_class", "") or "").lower()
         ename = (ev.get("event_name", "") or "").lower()
-        
-        if "cpu" in ename or wclass == "cpu":
+
+        if wclass == "scheduler" or "resmgr:" in ename or "resmgr " in ename:
+            # Resource Manager throttling is NOT real CPU exhaustion — it is enforced
+            # queuing. Classify as Concurrency so it is never read as a CPU bottleneck.
+            concurrency_pct += pct
+        elif "cpu" in ename or wclass == "cpu":
             cpu_pct += pct
         elif wclass in ("user i/o", "system i/o") or "i/o" in wclass:
             io_pct += pct
+        elif wclass == "commit" or "log file sync" in ename:
+            commit_pct += pct
+        elif wclass == "cluster" or ename.startswith("gc "):
+            cluster_pct += pct
+        elif wclass == "network" or "sql*net" in ename:
+            network_pct += pct
         elif wclass in ("concurrency", "application") or "lock" in ename or "latch" in ename:
             concurrency_pct += pct
-    
-    top_type = max([("CPU", cpu_pct), ("I/O", io_pct), ("Concurrency", concurrency_pct)], key=lambda x: x[1])
+
+    top_type = max(
+        [("CPU", cpu_pct), ("I/O", io_pct), ("Concurrency", concurrency_pct),
+         ("Commit", commit_pct), ("Cluster", cluster_pct), ("Network", network_pct)],
+        key=lambda x: x[1],
+    )
     return top_type[0] if top_type[1] > 5 else "Mixed"
 
 
@@ -2594,6 +2700,21 @@ def compare_periods(good_data: dict, bad_data: dict) -> ComparisonReport:
         })
 
     overall_desc, overall_severity = _classify_overall_severity(health_good["score"], health_bad["score"], incidents)
+
+    # Severity must also track load regression, not just efficiency-based health score.
+    # A DB can keep great cache-hit ratios yet be critically slow (DB Time ↑, AAS ≈ CPUs).
+    cpus_sev = _cpu_count(bad_data) or _cpu_count(good_data) or 1
+    aas_bad_sev = (bad_summary.db_time_secs / max(bad_summary.elapsed_secs, 1.0))
+    dbt_delta_sev = 0.0
+    if good_summary.db_time_secs > 0:
+        dbt_delta_sev = ((bad_summary.db_time_secs - good_summary.db_time_secs) / good_summary.db_time_secs) * 100.0
+    saturated = aas_bad_sev >= 0.9 * cpus_sev
+    if dbt_delta_sev >= 100 or (saturated and dbt_delta_sev >= 50):
+        overall_severity = "critical"
+        overall_desc += f" DB Time {dbt_delta_sev:+.0f}% (AAS {aas_bad_sev:.1f}/{cpus_sev} CPUs)."
+    elif overall_severity == "healthy" and dbt_delta_sev >= 25:
+        overall_severity = "degraded"
+        overall_desc += f" DB Time {dbt_delta_sev:+.0f}%."
 
     # Bottleneck classification
     good_bottleneck = _classify_bottleneck(good_data)

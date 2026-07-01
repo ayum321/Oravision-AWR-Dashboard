@@ -36,6 +36,11 @@ backend/uploads/
 backend/intelligence_cache/
 backend/pdf_uploads/
 
+# Outlook KB pipeline — raw mailbox content & generated KB (may be sensitive)
+outlook_drop/
+knowledge_base.jsonl
+kb_markdown/
+
 # Zip outputs
 *.zip
 

@@ -448,13 +448,19 @@ _WAIT_CATALOG: dict[str, dict] = {
     },
     "free buffer waits": {
         "cat": "Memory", "lat_ms": 100, "pct_threshold": 3,
-        "root": "Buffer cache full; DBWR cannot write dirty buffers fast enough to free space.",
+        "root": "Server process cannot find a free (clean) buffer; DBWR is not writing dirty buffers fast enough to keep up with the rate they are being created.",
         "fix": (
-            "1) Increase DB_CACHE_SIZE per Buffer Cache Advisory.\n"
-            "2) Add DBWR processes: DB_WRITER_PROCESSES = CPU_count / 4.\n"
-            "3) Reduce dirty buffer generation by optimising bulk DML."
+            "1) Localise the bottleneck FIRST: check 'db file parallel write' avg latency in "
+            "V$SYSTEM_EVENT. If high, DBWR is I/O-bound (storage) — adding writers will not help; "
+            "fix storage and confirm async I/O (DISK_ASYNCH_IO=TRUE, FILESYSTEMIO_OPTIONS=SETALL).\n"
+            "2) If db file parallel write is fast but waits persist, DBWR throughput is the limit: "
+            "raise DB_WRITER_PROCESSES toward CPU_COUNT/8 (Oracle default) — do not also set DBWR_IO_SLAVES.\n"
+            "3) Size the cache by evidence: V$DB_CACHE_ADVICE — increase DB_CACHE_SIZE only if "
+            "estd_physical_read_factor keeps dropping at a larger size.\n"
+            "4) Durable fix: cut the dirty-buffer/redo generation rate at source — tune the top DML SQL, "
+            "batch commits, and review bulk operations. This removes the load instead of widening the drain."
         ),
-        "oracle_ref": "Oracle Perf Guide — Tuning the Buffer Cache",
+        "oracle_ref": "Oracle Database Performance Tuning Guide — Tuning the Database Buffer Cache / Tuning the SGA",
         "tags": ["buffer_cache", "memory", "io"],
     },
     "direct path read": {

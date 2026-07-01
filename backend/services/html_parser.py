@@ -582,6 +582,69 @@ def _parse_foreground_wait_events(soup: BeautifulSoup) -> list[dict[str, Any]]:
     return results
 
 
+def _parse_background_wait_events(soup: BeautifulSoup) -> list[dict[str, Any]]:
+    """Parse the AWR "Background Wait Events" table.
+
+    This section holds waits owned by background processes (CKPT/DBWR/LGWR),
+    e.g. "enq: CR - block range reuse ckpt", "control file parallel write".
+    It uses a "% bg time" column (percentage of background process time), NOT
+    "% DB time" — a completely different table from Foreground/Top-10 Events.
+    Generic across any AWR report: whatever background events Oracle reports,
+    this parses all of them, not any specific named event.
+    """
+    tbl = _find_table_by_summary(soup, "background wait events")
+    if tbl is None:
+        tbl = _find_table_after_heading(soup, "Background Wait Events")
+    if tbl is None:
+        return []
+
+    headers, data = _table_header_and_data(tbl)
+    if not headers or not data:
+        return []
+
+    hdr_lower = [h.lower() for h in headers]
+
+    def _col(keywords):
+        for i, h in enumerate(hdr_lower):
+            if all(k in h for k in keywords):
+                return i
+        return None
+
+    event_idx = _col(["event"]) or 0
+    waits_idx = _col(["waits"])
+    if waits_idx is not None and waits_idx == _col(["avg"]):
+        waits_idx = None
+    if waits_idx is None:
+        for i, h in enumerate(hdr_lower):
+            if h.strip() == "waits":
+                waits_idx = i
+                break
+    total_idx = _col(["total wait"]) or _col(["time"])
+    avg_idx = _col(["avg"])
+    pct_bg_idx = _col(["% bg"]) or _col(["bg time"])
+
+    results = []
+    for row in data:
+        if not row or len(row) < 3:
+            continue
+        name = _clean(row[event_idx]) if event_idx < len(row) else ""
+        if not name:
+            continue
+        ev = {"event_name": name, "is_background": True}
+        if waits_idx is not None and waits_idx < len(row):
+            ev["total_waits"] = _parse_int(row[waits_idx])
+        if total_idx is not None and total_idx < len(row):
+            ev["time_waited_secs"] = _parse_num(row[total_idx])
+        if avg_idx is not None and avg_idx < len(row):
+            ev["avg_wait_ms"] = _normalize_wait_ms(row[avg_idx], headers[avg_idx] if avg_idx < len(headers) else "")
+        if pct_bg_idx is not None and pct_bg_idx < len(row):
+            ev["pct_bg_time"] = _parse_num(row[pct_bg_idx])
+        if not ev.get("avg_wait_ms") and ev.get("time_waited_secs", 0) > 0 and ev.get("total_waits", 0) > 0:
+            ev["avg_wait_ms"] = round(ev["time_waited_secs"] * 1000.0 / ev["total_waits"], 3)
+        results.append(ev)
+    return results
+
+
 def _parse_addm_findings(soup: BeautifulSoup) -> list[dict[str, Any]]:
     """Parse Top ADDM Findings table if present.
     
@@ -2041,6 +2104,7 @@ def parse_awr_html(html_content: str) -> dict[str, Any]:
         "wait list latch free": "Other",
         "oradebug request completion": "Other",
         "enq: cr - block range reuse ckpt": "Configuration",
+        "enq: ko - fast object checkpoint": "Configuration",
         "enq: fb - contention": "Application",
         "enq: us - contention": "Application",
         "enq: tx - index contention": "Concurrency",
@@ -2111,6 +2175,45 @@ def parse_awr_html(html_content: str) -> dict[str, Any]:
                         fge["wait_class"] = "Cluster"
     except Exception:
         pass
+
+    # --- Background Wait Events (CKPT/DBWR/LGWR-owned enqueues, e.g. enq: KO,
+    # enq: CR) --- These are reported in a separate AWR table using "% bg time"
+    # (not "% DB time") and are invisible to the Top-10 Foreground table, yet
+    # can be the actual blocking mechanism during a DBWR/checkpoint storm.
+    # Generic ingestion: merges whatever background events Oracle reports into
+    # the SAME wait_events list consumed everywhere downstream (comparator,
+    # PATHOLOGY_MAP lookup, UI) — no event-name-specific handling here.
+    try:
+        bg_events = _parse_background_wait_events(soup)
+        result["_background_wait_events"] = bg_events
+        db_time_secs_for_bg = float(result.get("db_time_min", 0.0) or 0.0) * 60.0
+        existing_names = {
+            e.get("event_name", "").lower() for e in result.get("wait_events", []) if isinstance(e, dict)
+        }
+        for bge in bg_events:
+            name_lower = bge.get("event_name", "").lower()
+            if not name_lower or name_lower in existing_names:
+                continue
+            merged = dict(bge)
+            # Normalize to a DB-time-comparable percentage so this event ranks
+            # on equal footing with foreground events in the generic pipeline
+            # (which reads pct_db_time universally, regardless of event source).
+            if db_time_secs_for_bg > 0:
+                merged["pct_db_time"] = round(
+                    merged.get("time_waited_secs", 0.0) / db_time_secs_for_bg * 100.0, 4
+                )
+            else:
+                merged["pct_db_time"] = 0.0
+            merged["wait_class"] = _WAIT_CLASS_FALLBACK.get(name_lower, "")
+            if not merged["wait_class"]:
+                if name_lower.startswith("enq:"):
+                    merged["wait_class"] = "Application"
+                elif name_lower.startswith("latch:"):
+                    merged["wait_class"] = "Concurrency"
+            result.setdefault("wait_events", []).append(merged)
+            existing_names.add(name_lower)
+    except Exception:
+        logger.exception("Error parsing Background Wait Events")
 
     # --- Time Model ---
     try:

@@ -7,12 +7,15 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from services.advanced_analytics import compute_advanced_analytics
-from services.comparator import compare_periods
+from services.comparator import compare_periods, _cpu_count
 from services.data_source import resolve_comparison_or_404, resolve_period_or_404
 from services.dot_connector import analyze_comparison
 from services.health_scorer import calculate_health_score
 from services.rca_engine import run_comparison_rca
 from services.recommendations import generate_recommendations
+from services import diagnostic_memory
+from services import kb_digest
+from services import scenario_detector
 
 router = APIRouter(prefix="/api/compare", tags=["compare"])
 
@@ -53,6 +56,38 @@ def _build_compare_response(
     advanced["batch_groups"] = report_dict.get("batch_groups", advanced.get("batch_groups", []))
     advanced["logon_storm_explanation"] = report_dict.get("logon_storm_explanation", "")
 
+    # Silent backend intelligence: match against learned + golden case library,
+    # then record this case so the engine grows smarter with every comparison.
+    try:
+        memory = diagnostic_memory.match(report_dict)
+        diagnostic_memory.record_case(
+            report_dict,
+            db_name=str(good_data.get("db_name", "")),
+            novel=bool(memory.get("is_novel")),
+        )
+    except Exception:
+        memory = {"matched": 0, "library_size": 0, "drift_warning": "", "is_novel": False}
+
+    # Cross-reference the flagged bottleneck against the expert incident digest.
+    try:
+        kb_matches = kb_digest.crossref(report_dict)
+    except Exception:
+        kb_matches = {"available": False, "incidents_indexed": 0, "match_count": 0, "matches": []}
+
+    # Performance-architect pattern recognition: name the structural scenario
+    # (cascading delete, stats collision, plan flip, volume growth) and connect
+    # it to the matching expert incident's verbatim fix.
+    try:
+        # Raw host CPU count (from the bad/incident period) threads into the
+        # generic resource-ceiling-vs-demand probes (e.g. PARALLEL oversubscription)
+        # that need it — report_dict alone carries no raw num_cpus field.
+        bad_cpu_count = _cpu_count(bad_data)
+        scenarios = scenario_detector.link_kb(
+            scenario_detector.detect(report_dict, cpu_count=bad_cpu_count), kb_matches
+        )
+    except Exception:
+        scenarios = []
+
     return {
         "sources": {"good": good_source, "bad": bad_source},
         "report": report_dict,
@@ -62,6 +97,9 @@ def _build_compare_response(
         "insights": insights,
         "comparison_rca": comparison_rca,
         "advanced": advanced,
+        "intelligence_memory": memory,
+        "kb_crossref": kb_matches,
+        "scenario_findings": scenarios,
     }
 
 

@@ -13,10 +13,24 @@ from services.rca_engine import run_rca, run_comparison_rca
 from services.awr_intelligence import run_intelligence, run_intelligence_compare, _CACHE as _intelligence_cache
 from services.data_source import get_uploaded_data, list_uploaded_data, normalize_upload_label, store_uploaded_data
 from services.advanced_analytics import compute_single_analytics
+from services import diagnostic_memory
+from services import kb_digest
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
+
+def _run_compare_analysis(good_dict: dict, bad_dict: dict, label1: str, label2: str):
+    """Heavy, CPU-bound comparison pipeline. Runs in a worker thread so the
+    event loop stays responsive while large AWR reports are analysed."""
+    report = compare_periods(good_dict, bad_dict)
+    health_good = calculate_health_score(good_dict)
+    health_bad = calculate_health_score(bad_dict)
+    recs = generate_recommendations(good_dict, bad_dict)
+    insights = analyze_comparison(good_dict, bad_dict, report.model_dump())
+    comparison_rca = run_comparison_rca(good_dict, bad_dict, label1, label2)
+    return report, health_good, health_bad, recs, insights, comparison_rca
 
 
 def _parse_and_store(html_content: str, label: str) -> dict:
@@ -191,8 +205,12 @@ async def upload_and_compare(
     except Exception:
         bad_html = bad_content.decode('latin-1', errors='replace')
 
+    loop = asyncio.get_running_loop()
+
+    # Parse both reports off the event loop so a large file cannot block the
+    # single worker (which makes the server appear unresponsive to the client).
     try:
-        good_dict = _parse_and_store(good_html, "uploaded_good")
+        good_dict = await loop.run_in_executor(_executor, _parse_and_store, good_html, "uploaded_good")
     except HTTPException:
         raise
     except Exception as exc:
@@ -200,7 +218,7 @@ async def upload_and_compare(
         raise HTTPException(422, "Could not parse baseline AWR file. Check server logs for details.") from exc
 
     try:
-        bad_dict = _parse_and_store(bad_html, "uploaded_bad")
+        bad_dict = await loop.run_in_executor(_executor, _parse_and_store, bad_html, "uploaded_bad")
     except HTTPException:
         raise
     except Exception as exc:
@@ -211,27 +229,37 @@ async def upload_and_compare(
     for _key in ["uploaded_good", "uploaded_bad", "uploaded_good_vs_uploaded_bad"]:
         _intelligence_cache.pop(_key, None)
 
+    label1 = good_file.filename or "Period 1"
+    label2 = bad_file.filename or "Period 2"
     try:
-        # Compare
-        report = compare_periods(good_dict, bad_dict)
-
-        # Health scores
-        health_good = calculate_health_score(good_dict)
-        health_bad = calculate_health_score(bad_dict)
-
-        # Recommendations
-        recs = generate_recommendations(good_dict, bad_dict)
-
-        # AI dot-connector analysis
-        insights = analyze_comparison(good_dict, bad_dict, report.model_dump())
-
-        # Run comparison RCA engine
-        label1 = good_file.filename or "Period 1"
-        label2 = bad_file.filename or "Period 2"
-        comparison_rca = run_comparison_rca(good_dict, bad_dict, label1, label2)
+        # Run the full comparison pipeline in a worker thread (CPU-bound).
+        report, health_good, health_bad, recs, insights, comparison_rca = await loop.run_in_executor(
+            _executor, _run_compare_analysis, good_dict, bad_dict, label1, label2
+        )
     except Exception as exc:
         log.exception("Comparison analysis failed")
         raise HTTPException(500, "Comparison analysis failed. Check server logs for details.") from exc
+
+    # Silent backend intelligence: match this comparison against the learned +
+    # golden case library, then record it so the engine grows with every run.
+    report_dict = report.model_dump()
+    try:
+        memory = diagnostic_memory.match(report_dict)
+        diagnostic_memory.record_case(
+            report_dict,
+            db_name=str(good_dict.get("db_name", "")),
+            novel=bool(memory.get("is_novel")),
+        )
+    except Exception:
+        log.exception("Diagnostic memory step failed (non-fatal)")
+        memory = {"matched": 0, "library_size": 0, "drift_warning": "", "is_novel": False}
+
+    # Cross-reference the flagged bottleneck against the expert incident digest.
+    try:
+        kb_matches = kb_digest.crossref(report_dict)
+    except Exception:
+        log.exception("KB digest cross-reference failed (non-fatal)")
+        kb_matches = {"available": False, "incidents_indexed": 0, "match_count": 0, "matches": []}
 
     # Fire comparison intelligence in background (failure here must not affect response)
     _gd, _bd = good_dict, bad_dict
@@ -261,6 +289,8 @@ async def upload_and_compare(
         "comparison_rca": comparison_rca,
         "good_data": good_dict,
         "bad_data": bad_dict,
+        "intelligence_memory": memory,
+        "kb_crossref": kb_matches,
         "intelligence_status": "running",
     }
 

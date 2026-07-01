@@ -130,6 +130,11 @@ class SqlRegression(BaseModel):
     # Phase 4 — wait absorption (CPU dropped while elapsed rose = blocked on waits)
     wait_absorption: bool = False
     wait_absorption_note: str = ""
+    # Generic SQL-type + parallelism signals (any SQL, any AWR pair — regex-derived,
+    # never hardcoded to a specific statement). Used to prefer DML causality over
+    # SELECT for write-pressure verdicts, and to detect PARALLEL(N) oversubscription.
+    is_dml: bool = False              # MERGE/INSERT/UPDATE/DELETE at statement start
+    parallel_degree: int = 0          # requested degree from a PARALLEL(N) hint, 0 if none
 
 
 class Recommendation(BaseModel):

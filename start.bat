@@ -57,14 +57,15 @@ exit /b 1
 echo  [OK] Python found: using "%PYTHON%"
 echo.
 
-:: ── Step 1: Kill leftover OraVision processes ────────────────────────
-echo  [..] Cleaning up any previous OraVision instances...
+:: ── Step 1: Kill EVERY leftover OraVision / uvicorn server ─────────
+echo  [..] Stopping any previous OraVision / uvicorn servers...
 del /q "%~dp0.oravision_port" >nul 2>&1
-for /f "tokens=2" %%p in ('wmic process where "commandline like '%%oravision%%uvicorn%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do (
-    taskkill /PID %%p /F >nul 2>&1
-)
-timeout /t 3 /nobreak >nul
-echo  [OK] Cleanup done.
+:: Robust (wmic-free) kill: any python running "uvicorn main:app" on any port.
+:: This prevents stale servers piling up on old ports and serving outdated pages.
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Get-CimInstance Win32_Process -Filter \"Name LIKE 'python%%'\" | Where-Object { $_.CommandLine -match 'uvicorn\s+main:app' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
+timeout /t 2 /nobreak >nul
+echo  [OK] Old servers stopped.
 echo.
 
 :: ── Step 2: Install dependencies ─────────────────────────────────────
@@ -109,9 +110,16 @@ echo    Restart        :  Just run start.bat again
 echo  ============================================================
 echo.
 
-:: ── Start uvicorn (blocks here until Ctrl+C) ─────────────────────────
+:: ── Final safety net: free the chosen port in case anything still holds it ─
+powershell -NoProfile -Command ^
+  "Get-NetTCPConnection -LocalPort !PORT! -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+
+:: ── Start uvicorn with auto-reload (blocks here until Ctrl+C) ────────
+:: --reload re-applies .py edits; Jinja2 already re-reads index.html per request,
+:: so a browser refresh always shows the latest dashboard — no stale pages.
 cd /d "%~dp0backend"
-%PYTHON% -m uvicorn main:app --host 127.0.0.1 --port !PORT!
+%PYTHON% -m uvicorn main:app --host 127.0.0.1 --port !PORT! ^
+  --reload --reload-dir routers --reload-dir services --reload-dir templates --reload-dir static --reload-include "*.html"
 
 :: ── Server stopped ───────────────────────────────────────────────────
 echo.

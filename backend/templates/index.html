@@ -2620,12 +2620,24 @@ const MECHANISM_TEXT = {
 
     COMMIT_LOGGING: function(ctx, avgWaitMs) {
         var ms = avgWaitMs || 0;
+        // Commit-rate awareness: "batch your commits" is only valid advice when commits
+        // are actually frequent. A high log file sync % at a LOW commit rate is NOT a
+        // commit-frequency problem \u2014 it is redo volume per commit or LGWR/storage latency,
+        // and there is nothing to batch.
+        var _lpb = (ctx && ctx.loadProfile && ctx.loadProfile.bad) || {};
+        var _commitsPerSec = _lpb.user_commits || _lpb.transactions || 0;
+        var _frequentCommits = _commitsPerSec >= 15;   // loop-commit threshold
+        var _lowCommitRate   = _commitsPerSec > 0 && _commitsPerSec < 5;
         return {
             tldr: ms > 20
                 ? 'Move redo logs to dedicated fast storage (NVMe/SSD) \u2014 avg LGWR latency exceeds 20ms'
                 : ms > 5
-                ? 'Both batch commits AND improve redo log storage \u2014 avg wait is moderate, both actions needed'
-                : 'Batch commits \u2014 avg LGWR latency is acceptable, commit frequency is the sole driver',
+                ? (_lowCommitRate
+                    ? 'Reduce redo volume per commit and check LGWR/storage \u2014 commit rate is low, so this is not a per-row commit loop'
+                    : 'Both batch commits AND improve redo log storage \u2014 avg wait is moderate, both actions needed')
+                : (_lowCommitRate
+                    ? 'Investigate redo volume per transaction \u2014 commit rate is low (' + _commitsPerSec.toFixed(1) + '/s); there is nothing to batch'
+                    : 'Batch commits \u2014 avg LGWR latency is acceptable, commit frequency is the driver'),
             full: ms > 10
                 ? 'Log file sync average wait exceeds the storage-adequate threshold \u2014 LGWR I/O latency '
                   + 'is the binding constraint. Each COMMIT blocks the committing session until LGWR writes '
@@ -2633,9 +2645,17 @@ const MECHANISM_TEXT = {
                   + 'slow or shared storage, even moderate commit rates produce significant cumulative wait. '
                   + 'Moving redo logs to dedicated NVMe or SSD storage is the structural fix \u2014 it '
                   + 'reduces wait time for every committing session simultaneously.'
-                : 'Log file sync wait time is below 10ms \u2014 LGWR I/O latency is acceptable. '
-                  + 'The pressure is commit frequency: each COMMIT forces LGWR to flush the redo buffer '
-                  + 'and acknowledge before the committing session continues. '
+                : _lowCommitRate
+                ? 'Log file sync average wait is below 10ms, but the commit rate is low ('
+                  + _commitsPerSec.toFixed(1) + '/s) \u2014 so this is NOT a per-row commit loop and "batch your '
+                  + 'commits" does not apply (there is nothing to batch). A high log file sync share at a low '
+                  + 'commit rate points at large redo volume per commit (each COMMIT flushes a big redo buffer) '
+                  + 'or LGWR contending with other redo writers / storage. Confirm redo bytes per transaction and '
+                  + 'LGWR write latency (db file parallel write, log file parallel write) before acting; connect to '
+                  + 'the database and use V$SYSTEM_EVENT / V$SESS_TIME_MODEL to complete confirmation.'
+                : 'Log file sync wait time is below 10ms \u2014 LGWR I/O latency is acceptable, and the commit rate '
+                  + 'is high (' + _commitsPerSec.toFixed(1) + '/s). The pressure is commit frequency: each COMMIT '
+                  + 'forces LGWR to flush the redo buffer and acknowledge before the committing session continues. '
                   + 'A per-row COMMIT pattern in a DML loop serializes on LGWR for every single row. '
                   + 'Batching commits every 1,000\u201310,000 rows reduces the LGWR round-trip count '
                   + 'by the same factor, with proportional throughput improvement.',
@@ -2643,6 +2663,10 @@ const MECHANISM_TEXT = {
                 ? 'Redo I/O latency degrades all write-intensive workloads simultaneously \u2014 '
                   + 'every session that issues a COMMIT waits on the same storage path. '
                   + 'The effect is global, not isolated to one SQL.'
+                : _lowCommitRate
+                ? 'Misreading this as a commit-frequency problem leads to "batch your commits" advice that '
+                  + 'cannot help \u2014 the commit rate is already low. The real lever is redo volume per commit or '
+                  + 'LGWR/storage write speed; chasing commit batching here wastes a remediation cycle.'
                 : 'DB Time grows proportionally with commit count. '
                   + 'Every additional DML row committed separately adds one LGWR round-trip \u2014 '
                   + '10,000 per-row commits at 3ms each = 30 seconds of pure serialized wait time '
@@ -2893,6 +2917,51 @@ const MECHANISM_TEXT = {
 // SQL verdict aliases
 MECHANISM_TEXT.PLAN_CHANGE = MECHANISM_TEXT.PLAN_CHANGE;
 
+// =============================================================================
+// WAIT_EVENT_MECHANISM — event-specific "Why It Happened" prose.
+// When the root-cause wait event has its own connected story, this overrides the
+// generic category mechanism so the narrative reads like a PE engineer explaining
+// the issue in an email: name the event, connect the dots, then draw the fix.
+// Keyed by lowercased event_name. Shape matches MECHANISM_TEXT: { tldr, full, risk }.
+// =============================================================================
+const WAIT_EVENT_MECHANISM = {
+    'enq: ko - fast object checkpoint': {
+        tldr: 'Stop the post-DML re-read from going direct path (test "_serial_direct_read"=NEVER for that job in non-prod) and make the object checkpoint faster \u2014 optimizer hints will not help here, the plan is already optimal.',
+        full: 'The job modifies a table and then immediately full-scans it. Because that scan runs as a '
+            + 'direct path read \u2014 Oracle reads the segment straight from disk, bypassing the buffer cache \u2014 '
+            + 'it cannot start until every dirty block of that object still sitting in the cache has been written '
+            + 'down to disk first. That object-level checkpoint is exactly what the "enq: KO - fast object '
+            + 'checkpoint" wait is timing: the scanning session sits on the KO enqueue while DBWR flushes the '
+            + 'blocks the job just dirtied. The longer wait in the slower environment is not a plan problem \u2014 '
+            + 'both plans are identical and optimal \u2014 it is simply that there are more dirty blocks to flush '
+            + 'and/or the storage writes them more slowly. The wait tracks dirty-block volume multiplied by '
+            + 'DBWR/storage write speed; nothing in the execution plan changes it.',
+        risk: 'Because the cost is the flush and not the access path, adding optimizer hints will not move it, '
+            + 'and forcing the plan away from the direct read can make the SQL worse. The durable levers are to '
+            + 'keep the just-dirtied blocks in cache for the re-read instead of forcing a checkpoint '
+            + '(session-level "_serial_direct_read"=NEVER, tested in non-prod with Oracle Support sign-off), '
+            + 'make the checkpoint itself faster (confirm db file parallel write latency, async I/O, '
+            + 'DB_WRITER_PROCESSES), or decouple the modify step from the scan so writes have settled before '
+            + 'the read begins.',
+    },
+    'free buffer waits': {
+        tldr: 'Localise first \u2014 check db file parallel write latency before adding writers: high latency means DBWR is storage-bound, so the fix is faster I/O, not more DB_WRITER_PROCESSES.',
+        full: 'Server processes are stalling because they cannot find a clean buffer to read into \u2014 every '
+            + 'buffer they reach is dirty and still waiting to be written to disk. That only happens when the '
+            + 'rate at which the workload dirties buffers outruns the rate at which DBWR can write them down. '
+            + 'So the wait is really a DBWR throughput problem sitting one step downstream of a heavy write/redo '
+            + 'workload: the more dirty buffers the batch generates, the longer sessions queue for a free one. '
+            + 'The wait time is governed by how fast DBWR and the storage can drain dirty blocks \u2014 not by the '
+            + 'buffer cache hit ratio, which can still look perfectly healthy while this is happening.',
+        risk: 'Left alone it compounds with workload growth: more DML and redo means a deeper dirty-buffer '
+            + 'backlog and longer stalls for every session, and the downstream symptoms (buffer busy waits, '
+            + 'write complete waits, log file sync) rise with it. Fix it from the drain outward \u2014 confirm '
+            + 'whether db file parallel write is I/O-bound (storage) or DBWR is throughput-bound '
+            + '(DB_WRITER_PROCESSES toward CPU_COUNT/8, async I/O), size the cache by V$DB_CACHE_ADVICE evidence, '
+            + 'and cut the dirty-block generation rate at source by tuning the heaviest DML.',
+    },
+};
+
 /**
  * resolveMechanism — called ONCE per generateComparisonVerdictNarrative invocation.
  * Returns { tldr, full, risk } — pure Oracle text, no SQL IDs, no percentages.
@@ -2918,6 +2987,30 @@ function resolveMechanism(finalPv, ctx, domSql) {
     var ev2 = (ctx.waitEvents && ctx.waitEvents.bad) || [];
     var logSyncEv = ev2.find(function(e) { return /log file sync/i.test(e.event_name||''); });
     if (logSyncEv) avgWaitMs = logSyncEv.avg_wait_ms || 0;
+
+    // ── EVENT-SPECIFIC MECHANISM OVERRIDE ─────────────────────────────────────
+    // When the root-cause is a wait event that has its own connected story
+    // (e.g. enq: KO checkpoint, free buffer waits), prefer that prose over the
+    // generic category text — but only for resource-wait verdicts, never when a
+    // SQL/CPU verdict owns the diagnosis (those carry their own stronger story).
+    var _sqlOwned = (_key === 'SQL_REGRESSION' || _key === 'NEW_SQL' ||
+                     _key === 'PLAN_CHANGE'   || _key === 'CPU_SATURATION');
+    if (!_sqlOwned && typeof WAIT_EVENT_MECHANISM === 'object') {
+        try {
+            var _rcEv = null;
+            var _rm = (ctx.verdict && ctx.verdict.roleMap) || null;
+            if (_rm) {
+                for (var _en in _rm) { if (_rm[_en] === 'root_cause') { _rcEv = _en; break; } }
+            }
+            if (!_rcEv) {
+                var _topNon = ev2.filter(function(e){ return !/idle/i.test(e.wait_class||''); })
+                                 .slice().sort(function(a,b){ return (b.pct_db_time||0)-(a.pct_db_time||0); })[0];
+                _rcEv = _topNon ? (_topNon.event_name||'') : '';
+            }
+            var _wem = WAIT_EVENT_MECHANISM[(_rcEv||'').toLowerCase().trim()];
+            if (_wem) return _wem;
+        } catch (_e) { /* non-fatal — fall through to category mechanism */ }
+    }
 
     // IO sub-type detection
     var subType = null;
@@ -2994,6 +3087,70 @@ function validateNoRepetition(rctx, sections) {
     }
 
     return violations;
+}
+
+/**
+ * validateConclusiveness — Diagnostic Quality Contract auditor.
+ * GENERALISATION GUARD (not a per-case patch): instead of chasing individual AWR
+ * gaps one customer at a time, this enforces the 4-part VALUE CONTRACT that every
+ * verdict the tool emits must satisfy, for any workload, any customer, any AWR:
+ *   (1) NAMED ROOT     — a specific bottleneck / event / SQL, not "multiple hypotheses"
+ *   (2) CITED EVIDENCE — at least one quantified signal (number + unit: %, ms, /s, pp…)
+ *   (3) CONCRETE ACTION— a specific change (ALTER / param / reorg / index / batch / stats),
+ *                        not a bare "investigate" / "review" / "tune the SQL"
+ *   (4) DB-CONFIRM STEP— an exact live-DB check (V$ / DBA_ / ASH query) to complete
+ *                        confirmation — the "how do I reach the fix on the database" path
+ * Returns { score 0-100, contract{}, missing[], vagueHits[] }. Always computed and
+ * stamped on ctx so any surface can read it; only console-logs in dev. It NEVER alters
+ * the rendered output — it is a measurement/precaution layer that makes vagueness visible
+ * so gaps get caught before they reach a customer.
+ */
+function validateConclusiveness(parts) {
+    var sections = (parts && parts.sections) || {};
+    var allText = Object.keys(sections).map(function(k){ return sections[k] || ''; }).join('\n')
+                + '\n' + ((parts && parts.verdict) || '')
+                + '\n' + ((parts && parts.mechanism) || '');
+    var low = allText.toLowerCase();
+
+    // Concrete-action anchors: presence of any of these redeems text from "vague".
+    var ANCHOR = /(V\$|GV\$|DBA_|ASH|ALTER\s+(TABLE|INDEX|SYSTEM|SESSION)|INITRANS|PCTFREE|DBMS_STATS|DB_WRITER_PROCESSES|PGA_AGGREGATE_TARGET|SGA_TARGET|rebuild|reorg|hash[- ]?partition|bind variable|batch.{0,12}commit|gather.{0,12}stat|SQL_ID|plan_hash|move.{0,20}(SSD|NVMe|storage))/i;
+    // Live-DB confirmation queries — the path to confirm on the database.
+    var DBQ = /(V\$SYSTEM_EVENT|V\$ACTIVE_SESSION_HISTORY|DBA_HIST|V\$SQL|V\$SESSION|V\$SEGMENT_STATISTICS|V\$SQL_PLAN|V\$IOSTAT|GV\$|ASH)/i;
+
+    var contract = {
+        namedRoot:      (((parts && parts.verdict) || '').trim().length > 0)
+                          && !/multiple hypotheses|unknown|undetermined|not determined|n\/a/i.test((parts && parts.verdict) || ''),
+        citedEvidence:  /\d+(\.\d+)?\s?(%|ms|sec|\bs\b|pp|x\b|\/s|gets|reads|writes|commits)/i.test(allText),
+        concreteAction: ANCHOR.test(allText),
+        dbConfirm:      DBQ.test(allText),
+    };
+
+    // Vague phrases that signal low-value output when NOT paired with a concrete anchor.
+    var VAGUE = ['multiple hypotheses', 'further analysis', 'further investigation',
+        'needs investigation', 'look into', 'consider tuning', 'tune the sql',
+        'various factors', 'something is wrong', 'review the situation', 'may be the cause'];
+    var vagueHits = [];
+    VAGUE.forEach(function(p){ if (low.indexOf(p) !== -1) vagueHits.push(p); });
+
+    // Score: 25 pts per satisfied contract part, minus a capped vagueness penalty.
+    var filled = (contract.namedRoot?1:0) + (contract.citedEvidence?1:0)
+               + (contract.concreteAction?1:0) + (contract.dbConfirm?1:0);
+    var score  = Math.max(0, Math.min(100, filled*25 - Math.min(20, vagueHits.length*5)));
+    var missing = Object.keys(contract).filter(function(k){ return !contract[k]; });
+    var result = { score: score, contract: contract, missing: missing, vagueHits: vagueHits };
+
+    var _isDev = (typeof window !== 'undefined')
+        && ((window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+            || window._awr_dev === true);
+    if (_isDev && typeof console !== 'undefined' && (missing.length || vagueHits.length)) {
+        console.group('\uD83D\uDFE1 DIAGNOSTIC QUALITY ' + score + '/100 — ' + ((parts && parts.verdict) || 'verdict'));
+        if (missing.length)   console.warn('Missing value-contract parts:', missing.join(', '));
+        if (vagueHits.length) console.warn('Vague phrases (no concrete anchor nearby):', vagueHits.join('; '));
+        console.warn('Contract → root:' + contract.namedRoot + ' evidence:' + contract.citedEvidence
+            + ' action:' + contract.concreteAction + ' dbConfirm:' + contract.dbConfirm);
+        console.groupEnd();
+    }
+    return result;
 }
 
 function buildAWRContext(data) {
@@ -3535,6 +3692,58 @@ function classifyAndAnnotate(ctx) {
         }
     }
 
+    // 5a.2 Post-processing: DIRECT_PATH_CHECKPOINT corrects the commit-frequency story.
+    // When direct-path reads on a freshly-modified object force an object-level checkpoint
+    // (enq: KO - fast object checkpoint), the binding cost is dirty-block volume + storage
+    // WRITE speed — NOT commit frequency. A high log file sync % in this signature is a
+    // co-symptom of the same write pressure, so COMMIT_LOGGING ("batch your commits") is
+    // the wrong headline. Cap it, and name the object checkpoint as the root cause so the
+    // mechanism narrative (resolveMechanism reads roleMap.root_cause) tells the checkpoint
+    // story. The DIRECT_PATH_CHECKPOINT causal pattern is also rendered in its own panel,
+    // so the engineer reasoning surfaces regardless of which category carries the headline.
+    const _dpCheckpoint = (verdict.causalPatterns || []).find(p => p.id === 'DIRECT_PATH_CHECKPOINT');
+    if (_dpCheckpoint && verdict.categoryScores) {
+        const _clScoreBefore = verdict.categoryScores.COMMIT_LOGGING || 0;
+        if (_clScoreBefore > 0) {
+            verdict.categoryScores.COMMIT_LOGGING = Math.min(_clScoreBefore, 20); // cap so commit-frequency can't win
+        }
+        // Override role map so the object checkpoint is the root cause and the redo / DBWR
+        // write waits are recognised as co-symptoms of the same write pressure.
+        if (verdict.roleMap) {
+            for (const en of Object.keys(verdict.roleMap)) {
+                if (/fast object checkpoint|enq: ko/i.test(en))                                       verdict.roleMap[en] = 'root_cause';
+                else if (/direct path read/i.test(en))                                                verdict.roleMap[en] = 'expected_side_effect';
+                else if (/db file parallel write|write complete waits|free buffer waits/i.test(en))   verdict.roleMap[en] = 'amplifier';
+                else if (/log file sync|log file parallel write/i.test(en))                           verdict.roleMap[en] = 'amplifier';
+            }
+        }
+        // If the commit-frequency story was the winner, re-pick a winner that is not COMMIT_LOGGING.
+        if (verdict.primaryVerdict === 'COMMIT_LOGGING') {
+            const _dqSet = new Set((verdict.disqualifiedCategories||[]).map(d=>d.category));
+            const _pOrder = ['DOMINANT_SQL','NEW_SQL','PLAN_CHANGE','SQL_REGRESSION',
+                'CPU_SATURATION','IO_BOTTLENECK','BUFFER_WRITE_PRESSURE','WORKLOAD_GROWTH',
+                'CONCURRENCY','LOGON_STORM','PGA_PRESSURE'];
+            let _newWinner = null, _newScore = 0;
+            for (const cat of _pOrder) {
+                const s = verdict.categoryScores[cat] || 0;
+                if (s > 0 && !_dqSet.has(cat) && !_newWinner) { _newWinner = cat; _newScore = s; }
+                else if (s > 0 && !_dqSet.has(cat) && _newWinner && (s - _newScore) > 15) { _newWinner = cat; _newScore = s; }
+            }
+            if (_newWinner) {
+                verdict.primaryVerdict = _newWinner;
+                verdict.primaryReason = `[DIRECT_PATH_CHECKPOINT override] COMMIT_LOGGING was demoted — log file sync here is a co-symptom of object-checkpoint write pressure from direct-path reads, not a commit-frequency problem. ${verdict.primaryReason||''}`;
+            }
+        }
+        // Reflect the capped score in considered categories
+        if (verdict.consideredCategories) {
+            const _clCat = verdict.consideredCategories.find(c => c.category === 'COMMIT_LOGGING');
+            if (_clCat && _clScoreBefore > 0) {
+                _clCat.score = verdict.categoryScores.COMMIT_LOGGING;
+                _clCat.reason += ` [CAPPED by DIRECT_PATH_CHECKPOINT: was ${_clScoreBefore}, now ${verdict.categoryScores.COMMIT_LOGGING}]`;
+            }
+        }
+    }
+
     // 5b. Store on window so cross-section functions (analyzeSessionConnections) can access
     window.AWRContext = ctx;
 
@@ -3756,6 +3965,16 @@ const WAIT_EVENT_CATALOG = {
     fixExpect: 'Top segments by physical reads in AWR window + parallel/serial direct read config.',
     fixAction: 'Review parallel settings. Check _serial_direct_read threshold. Add indexes.',
   },
+  'enq: ko - fast object checkpoint': {
+    mechanism: 'Object-level checkpoint before a direct path read. When a session does a serial/parallel direct path read (full scan that bypasses the buffer cache), Oracle must first flush ALL dirty blocks of that segment from the cache to disk for read consistency. The KO enqueue serialises this object checkpoint; the scanning session waits on DBWR. Wait time is driven by dirty-block volume x DBWR/storage write speed — NOT by the execution plan.',
+    waitClass: 'Application',
+    diagnosticMetrics: ['physical_writes', 'block_changes', 'physical_reads'],
+    specialRule: 'Classic "modify-then-fullscan" batch pattern: a job DMLs a table then immediately direct-path scans it. Optimizer hints will NOT help — the plan is already optimal; the cost is the dirty-block flush, not the access path.',
+    addmKeywords: ['Top Segments by User I/O', 'Top Segments by DB Block Changes', 'fast object checkpoint'],
+    fixQuery: "-- Step 1: Which segment is both heavily MODIFIED and direct-path SCANNED in this window?\nSELECT o.owner, o.object_name, o.object_type,\n       SUM(s.db_block_changes_delta) block_changes,\n       SUM(s.physical_reads_delta)   phys_reads\nFROM dba_hist_seg_stat s\nJOIN dba_hist_seg_stat_obj o\n  ON s.obj# = o.obj# AND s.dataobj# = o.dataobj# AND s.dbid = o.dbid\nWHERE s.snap_id BETWEEN [begin_snap_id] AND [end_snap_id]\n  AND s.dbid = (SELECT dbid FROM v$database)\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY block_changes DESC\nFETCH FIRST 15 ROWS ONLY;\n\n-- Step 2: Is the re-read going direct path? Check serial-direct-read config.\nSELECT name, value, description\nFROM v$parameter\nWHERE name IN ('_serial_direct_read','db_file_multiblock_read_count',\n               'db_writer_processes','disk_asynch_io','filesystemio_options');\n\n-- Step 3: Confirm DBWR write throughput is not the limiter (object checkpoint = DBWR work)\nSELECT event, total_waits, time_waited_micro/1e6 secs,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event IN ('db file parallel write','enq: KO - fast object checkpoint');",
+    fixExpect: 'The same segment appears top by db_block_changes AND is direct-path scanned = the modify-then-fullscan target. High db file parallel write avg_ms = checkpoint is storage-bound.',
+    fixAction: '(1) Do NOT add optimizer hints — the plan is optimal; this is a dirty-block-flush cost, not an access-path problem. (2) Targeted lever: stop the post-DML re-read from going direct path so it reads the just-dirtied blocks from cache (already warm) instead of forcing an object checkpoint — test ALTER SESSION SET "_serial_direct_read"=NEVER for that job in non-prod first (underscore param: get Oracle Support sign-off). (3) Speed up the checkpoint: confirm db file parallel write latency, async I/O (DISK_ASYNCH_IO/FILESYSTEMIO_OPTIONS=SETALL) and DB_WRITER_PROCESSES, since KO wait = dirty blocks x DBWR write speed. (4) Decouple modify-from-scan: sequence the batch so the scan runs after writes settle, or re-read via index/GTT/PL-SQL collection instead of a full re-scan. (5) Reorg/rebuild only helps if the segment is bloated (lower HWM = fewer blocks to scan and checkpoint) — it is not a direct KO fix.',
+  },
   'direct path read temp': {
     mechanism: 'Sort/hash spill to TEMP — PGA undersized or single SQL overrun. Sorts/hash joins cannot fit in PGA work area and spill to TEMP tablespace.',
     waitClass: 'User I/O',
@@ -3796,7 +4015,7 @@ const WAIT_EVENT_CATALOG = {
     waitClass: 'Concurrency',
     diagnosticMetrics: ['logical_reads', 'block_changes'],
     addmKeywords: ['Buffer Busy', 'Hot Block', 'hot object'],
-    oracleNote: 'Query V$WAITSTAT to identify block class. Segment header → use ASSM. Data block → hash partition or INITRANS. Undo block → check V\ for UNEXPIREDSTOLEN and validate DBA_DATA_FILES autoextend settings.',
+    oracleNote: 'Query V$WAITSTAT to identify the block class. Segment header \u2192 enable ASSM (automatic segment space management). Data block (INSERT hot spot) \u2192 hash-partition the table or raise INITRANS. Undo header / undo block \u2192 undo pressure; check V$UNDOSTAT and increase the number/size of undo segments (or UNDO_RETENTION).',
     avgWaitDiagnosis: {
       anyLevel: 'Avg wait time matters less than TOTAL waits. High count on segment header = freelist contention. High count on data block = INSERT hot spot.',
     },
@@ -3983,13 +4202,13 @@ const WAIT_EVENT_CATALOG = {
     fixAction: 'Review redo log group sizing and switch interval targets. Correlate with log file sync/parallel write behavior.',
   },
   'gc cr request': {
-    mechanism: 'RAC global cache request for consistent-read block from remote instance.',
+    mechanism: 'RAC Cache Fusion consistent-read (CR) request \u2014 a transient PLACEHOLDER event. Oracle renames it on completion to the actual outcome (gc cr block 2-way / 3-way, gc cr block busy, gc cr block congested, or a grant). Per the Oracle Database Reference it is NOT reported in AWR system-event sections \u2014 it only appears in ASH. In an AWR Top Events list you will therefore see the resolved gc cr block/grant events, never "gc cr request" itself.',
     waitClass: 'Cluster',
     diagnosticMetrics: ['logical_reads'],
     addmKeywords: ['Global Cache', 'RAC'],
-    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr request'\nORDER BY time_waited_micro DESC;",
-    fixExpect: 'High waits and avg_ms indicate cross-instance read locality issues.',
-    fixAction: 'Align service/data affinity to reduce remote CR requests and investigate interconnect quality when avg_ms is elevated.',
+    fixQuery: "-- 'gc cr request' is renamed on completion; it appears in ASH, not in AWR / V$SYSTEM_EVENT.\n-- Step 1 (AWR): the RESOLVED CR events actually carry the wait time\nSELECT event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event LIKE 'gc cr block%' OR event LIKE 'gc cr grant%'\nORDER BY time_waited_micro DESC;\n\n-- Step 2 (ASH): which SQL waited on the request itself\nSELECT sql_id, COUNT(*) samples\nFROM gv$active_session_history\nWHERE event = 'gc cr request'\nGROUP BY sql_id\nORDER BY samples DESC FETCH FIRST 10 ROWS ONLY;",
+    fixExpect: 'The resolved gc cr block/grant events carry the time in AWR: high 2-way/3-way volume = cross-instance read sharing; *busy* = serving instance flushing redo before shipping a dirty block; *congested* = GCS (LMS) server processes saturated.',
+    fixAction: 'Align service/data affinity to cut remote CR demand. Then branch on the resolved event: if *congested*, increase GCS_SERVER_PROCESSES (LMS) and relieve LMS CPU starvation; if *busy*, reduce cross-instance dirty-block sharing; if 2-way/3-way latency is high, investigate interconnect quality.',
   },
   'gc current grant 2-way': {
     mechanism: 'RAC transfer of current (modifiable) block between instances.',
@@ -4010,31 +4229,31 @@ const WAIT_EVENT_CATALOG = {
     fixAction: 'Apply object/service affinity and reduce shared hot-row updates across instances.',
   },
   'gc cr grant congested': {
-    mechanism: 'RAC CR grant delayed due to interconnect or global cache service congestion.',
+    mechanism: 'RAC CR grant queued at the serving instance because the GCS server processes (LMSn) are saturated by a high volume of incoming Cache Fusion requests. This is LMS / CPU congestion at the serving node \u2014 NOT interconnect latency or packet loss (those produce *lost*-block events, not *congested* ones).',
     waitClass: 'Cluster',
     diagnosticMetrics: ['logical_reads'],
-    addmKeywords: ['Global Cache', 'Interconnect Congestion'],
-    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr grant congested'\nORDER BY time_waited_micro DESC;",
-    fixExpect: 'Congested variant points to RAC transport/service pressure rather than normal CR shipping.',
-    fixAction: 'Validate interconnect latency, packet drops, and node load symmetry. Address network or RAC service imbalance before SQL-level tuning.',
+    addmKeywords: ['Global Cache', 'GCS Server Processes', 'LMS'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr grant congested'\nORDER BY time_waited_micro DESC;\n\n-- Are LMS (GCS server) processes CPU-starved? Check their service time / count\nSELECT name, value FROM v$parameter WHERE name = 'gcs_server_processes';",
+    fixExpect: 'The "congested" suffix specifically means the GCS server (LMS) processes could not service the request in time \u2014 look for LMS CPU starvation, not packet loss.',
+    fixAction: 'Increase GCS_SERVER_PROCESSES (more LMS processes) \u2014 the Oracle-documented remedy for congested global-cache events \u2014 and ensure LMS processes are not CPU-starved (real-time priority, adequate CPU headroom). Interconnect/network tuning addresses *lost*-block events, not *congested* ones.',
   },
   'gc current block congested': {
-    mechanism: 'RAC current-block transfer delayed by congestion in global cache path.',
+    mechanism: 'RAC current-block transfer queued at the serving instance because the GCS server processes (LMSn) are overloaded by a high volume of Cache Fusion requests. This is LMS / CPU congestion at the serving node \u2014 NOT interconnect latency (network problems surface as *lost*-block events instead).',
     waitClass: 'Cluster',
     diagnosticMetrics: ['block_changes'],
-    addmKeywords: ['Global Cache', 'Interconnect Congestion'],
-    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc current block congested'\nORDER BY time_waited_micro DESC;",
-    fixExpect: 'Congested current-block transfers indicate combined write-sharing and transport pressure.',
-    fixAction: 'Reduce cross-instance write chatter and verify RAC interconnect headroom and error-free transport.',
+    addmKeywords: ['Global Cache', 'GCS Server Processes', 'LMS'],
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc current block congested'\nORDER BY time_waited_micro DESC;\n\nSELECT name, value FROM v$parameter WHERE name = 'gcs_server_processes';",
+    fixExpect: 'The "congested" suffix means the GCS server (LMS) processes were too busy to service the request in time \u2014 an LMS throughput problem at the serving instance, not a transport one.',
+    fixAction: 'Increase GCS_SERVER_PROCESSES and relieve LMS CPU starvation (the Oracle-documented remedy for congested events). Reduce cross-instance write sharing to lower request volume. Interconnect tuning applies to *lost*-block events, not *congested*.',
   },
   'gc cr block busy': {
-    mechanism: 'Requested CR block is busy or delayed in global cache servicing path.',
+    mechanism: 'RAC CR block transfer put on hold at the serving instance \u2014 typically because a dirty buffer had to be shipped and the serving instance must FLUSH REDO before the Cache Fusion transfer can proceed (or the buffer was pinned by another process there). The wait reflects serving-side redo-flush / block-release time, not the network hop itself.',
     waitClass: 'Cluster',
     diagnosticMetrics: ['logical_reads'],
     addmKeywords: ['Global Cache', 'Block Busy'],
-    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr block busy'\nORDER BY time_waited_micro DESC;",
-    fixExpect: 'High waits indicate hot global-cache blocks and service delay.',
-    fixAction: 'Identify hot segments via AWR segment GC stats and redistribute workload ownership.',
+    fixQuery: "SELECT inst_id, event, total_waits,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM gv$system_event\nWHERE event = 'gc cr block busy'\nORDER BY time_waited_micro DESC;\n\n-- Hot cross-instance segments (where the redo-flush-before-transfer keeps happening)\nSELECT inst_id, object_name, statistic_name, value\nFROM gv$segment_statistics\nWHERE statistic_name LIKE 'gc%'\nORDER BY value DESC FETCH FIRST 10 ROWS ONLY;",
+    fixExpect: 'High "busy" time = serving instance repeatedly flushing redo before shipping hot dirty blocks (heavy cross-instance write sharing on the same blocks).',
+    fixAction: 'Reduce cross-instance updates to the same hot blocks \u2014 use service/object affinity so one instance owns the hot segment. Faster redo storage at the serving instance shortens the pre-transfer REDO flush.',
   },
   'PX Deq: Execute Reply': {
     mechanism: 'Parallel execution process waiting for execution reply message from peer/slave.',
@@ -4212,9 +4431,9 @@ const WAIT_EVENT_CATALOG = {
     oracleThresholds: {
       bufferHitPct: { warn: 95, critical: 90, action: 'Check V$DB_CACHE_ADVICE — if estd_physical_read_factor < 0.8 at current size, validate whether cache sizing adjustment is warranted' },
     },
-    fixQuery: "-- AWR snap delta: DBWR wait events (replace [begin_snap_id]/[end_snap_id] from AWR header)\nSELECT event_name,\n  MAX(total_waits)     - MIN(total_waits)              waits_delta,\n  ROUND((MAX(time_waited_micro) - MIN(time_waited_micro))/1e6, 1) secs_delta\nFROM dba_hist_system_event\nWHERE snap_id IN ([begin_snap_id],[end_snap_id])\n  AND dbid = (SELECT dbid FROM v$database)\n  AND event_name IN ('free buffer waits','db file parallel write','no free buffers')\nGROUP BY event_name\nORDER BY secs_delta DESC NULLS LAST;\n\n-- AWR snap delta: DBWR throughput statistics\nSELECT stat_name,\n  MAX(value) - MIN(value) delta_value\nFROM dba_hist_sysstat\nWHERE snap_id IN ([begin_snap_id],[end_snap_id])\n  AND dbid = (SELECT dbid FROM v$database)\n  AND stat_name IN ('DBWR checkpoint buffers written','DBWR checkpoints','physical writes direct')\nGROUP BY stat_name\nORDER BY stat_name;",
-    fixExpect: 'secs_delta highest on db file parallel write = I/O-bound DBWR (storage investigation needed). secs_delta highest on free buffer waits = DBWR process throughput insufficient. Low DBWR checkpoint buffers written delta vs high waits = validate db_writer_processes count vs CPU count.',
-    fixAction: 'Validate in order: (1) Review db file parallel write average latency in V$SYSTEM_EVENT. (2) Check V$DB_CACHE_ADVICE for cache sizing guidance. (3) Confirm current db_writer_processes setting vs CPU count in V$PARAMETER. (4) Verify DISK_ASYNCH_IO and FILESYSTEMIO_OPTIONS settings. Engage DBA before any parameter adjustments.',
+    fixQuery: "-- AWR snap delta: DBWR wait events (replace [begin_snap_id]/[end_snap_id] from AWR header)\nSELECT event_name,\n  MAX(total_waits)     - MIN(total_waits)              waits_delta,\n  ROUND((MAX(time_waited_micro) - MIN(time_waited_micro))/1e6, 1) secs_delta\nFROM dba_hist_system_event\nWHERE snap_id IN ([begin_snap_id],[end_snap_id])\n  AND dbid = (SELECT dbid FROM v$database)\n  AND event_name IN ('free buffer waits','db file parallel write','no free buffers')\nGROUP BY event_name\nORDER BY secs_delta DESC NULLS LAST;\n\n-- AWR snap delta: DBWR throughput statistics\nSELECT stat_name,\n  MAX(value) - MIN(value) delta_value\nFROM dba_hist_sysstat\nWHERE snap_id IN ([begin_snap_id],[end_snap_id])\n  AND dbid = (SELECT dbid FROM v$database)\n  AND stat_name IN ('DBWR checkpoint buffers written','DBWR checkpoints','physical writes direct')\nGROUP BY stat_name\nORDER BY stat_name;\n\n-- Live cross-check: how many dirty buffers are backed up, and is the redo log too small?\n-- (small redo logs force frequent checkpoints, which add DBWR write load)\nSELECT COUNT(*) AS dirty_buffers FROM v$bh WHERE dirty = 'Y';\nSELECT group#, bytes/1024/1024 AS mb, members, status FROM v$log ORDER BY group#;\nSELECT TO_CHAR(first_time,'YYYY-MM-DD HH24') hour, COUNT(*) log_switches\nFROM v$log_history WHERE first_time > SYSDATE - 1\nGROUP BY TO_CHAR(first_time,'YYYY-MM-DD HH24') ORDER BY 1;",
+    fixExpect: 'secs_delta highest on db file parallel write = I/O-bound DBWR (storage investigation needed). secs_delta highest on free buffer waits = DBWR process throughput insufficient. Low DBWR checkpoint buffers written delta vs high waits = validate db_writer_processes count vs CPU count. A large dirty_buffers count plus frequent log_switches (small redo logs) = checkpoint-driven DBWR pressure.',
+    fixAction: 'Validate in order: (1) Review db file parallel write average latency in V$SYSTEM_EVENT \u2014 if high, DBWR is I/O-bound, so fix storage / async I/O first. (2) Check V$DB_CACHE_ADVICE for cache sizing guidance. (3) Confirm current db_writer_processes vs CPU count in V$PARAMETER \u2014 raise DB_WRITER_PROCESSES toward CPU_COUNT/8 if DBWR is throughput-bound (do NOT also enable DBWR_IO_SLAVES; use one mechanism, not both). (4) Verify DISK_ASYNCH_IO and FILESYSTEMIO_OPTIONS=SETALL. (5) If DBWR pressure tracks frequent log switches, enlarge redo log groups (V$LOG / V$LOG_HISTORY) so checkpoints fire less often. (6) Durable fix: cut the dirty-block generation rate by tuning the heaviest DML. Engage DBA before any parameter adjustments.',
   },
 
   'enq: TX - allocate ITL entry': {
@@ -4641,6 +4860,186 @@ const WAIT_EVENT_CATALOG = {
     fixExpect: 'Top object by waits = the segment being extended. MSSM tablespaces are more prone to FB contention.',
     fixAction: 'Confirm the extending segment via ASH (current_obj#). Check tablespace segment_space_management (ASSM vs MSSM). Review current NEXT extent size. Engage DBA to evaluate extent pre-allocation and tablespace configuration before any structural changes.',
   },
+
+  // -- REDO / CHECKPOINT / MEMORY (commonly seen, previously uncatalogued) --
+  'log file switch (private strand flush incomplete)': {
+    mechanism: 'On a log switch, redo accumulated in private redo strands (12c+ private redo / IMU) must be flushed into the log buffer and out to the current redo log before the switch can complete. Sessions generating redo stall until the strand flush finishes. Driven by heavy redo generation combined with undersized or too-few redo logs forcing frequent switches.',
+    waitClass: 'Configuration',
+    diagnosticMetrics: ['block_changes', 'redo_size'],
+    addmKeywords: ['redo log', 'log switch', 'private strand', 'LGWR'],
+    oracleNote: 'Almost always paired with frequent log switches. Target < 1 switch per 15-20 min at peak. Symptom of redo-log sizing, not a strand bug.',
+    fixQuery: "-- Redo log group sizing and switch frequency\nSELECT group#, ROUND(bytes/1024/1024) mb, members, status FROM v$log ORDER BY group#;\nSELECT TO_CHAR(first_time,'YYYY-MM-DD HH24') hr, COUNT(*) switches\nFROM v$log_history WHERE first_time > SYSDATE - 1\nGROUP BY TO_CHAR(first_time,'YYYY-MM-DD HH24') ORDER BY 1;\n\n-- Redo generation rate\nSELECT name, value FROM v$sysstat WHERE name IN ('redo size','redo writes','redo log space requests');",
+    fixExpect: 'More than ~3-4 switches/hour at peak with this event = redo logs too small. High redo log space requests = log buffer/log group pressure.',
+    fixAction: 'Validate switch frequency via V$LOG_HISTORY. Enlarge redo log groups so checkpoints/switches fire less often (engage DBA for sizing). Reduce redo at source by tuning the heaviest DML. Verify LGWR write latency via log file parallel write avg.',
+  },
+  'checkpoint completed': {
+    mechanism: 'Session is waiting for a checkpoint to finish — DBWR must write all dirty buffers protected by the redo being checkpointed. Fires during log switches, ALTER TABLESPACE OFFLINE/BEGIN BACKUP, datafile shrink, or when FAST_START_MTTR_TARGET forces aggressive checkpointing.',
+    waitClass: 'Configuration',
+    diagnosticMetrics: ['block_changes', 'physical_reads'],
+    addmKeywords: ['checkpoint', 'DBWR', 'MTTR'],
+    oracleNote: 'If correlated with log switches, it is a redo-log-sizing + DBWR throughput issue. If during admin operations, it is expected and transient.',
+    fixQuery: "-- Checkpoint activity and MTTR target\nSELECT name, value FROM v$sysstat\nWHERE name IN ('DBWR checkpoints','DBWR checkpoint buffers written','background checkpoints completed','background checkpoints started');\nSELECT name, value FROM v$parameter WHERE name IN ('fast_start_mttr_target','log_checkpoint_interval','log_checkpoint_timeout');\n\n-- DBWR write latency\nSELECT event, total_waits, ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event WHERE event = 'db file parallel write';",
+    fixExpect: 'High db file parallel write avg_ms = DBWR I/O-bound. Many background checkpoints completed vs started gap = checkpoints lagging.',
+    fixAction: 'If log-switch driven: enlarge redo logs. Review FAST_START_MTTR_TARGET — too low forces constant checkpointing. Improve DBWR throughput (db_writer_processes vs CPU, async I/O). Engage DBA before parameter changes.',
+  },
+  'target log write size': {
+    mechanism: 'LGWR (12c+) adaptively batches redo to a target write size to improve write efficiency. This event records time LGWR spends accumulating redo toward that target before issuing the write. Usually benign; becomes notable only when redo throughput is high and writes are being deferred for batching.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['redo_size'],
+    addmKeywords: ['LGWR', 'redo', 'log write'],
+    oracleNote: 'Typically low-impact and self-tuning. Investigate only if it appears in the Top 5 alongside log file sync — then the real issue is redo volume or LGWR/storage latency.',
+    fixQuery: "-- Compare against the commit-critical events\nSELECT event, total_waits, time_waited,\n  ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event IN ('target log write size','log file sync','log file parallel write')\nORDER BY time_waited DESC;",
+    fixExpect: 'If log file parallel write avg_ms is healthy (<5ms) this event is cosmetic. If log file sync is also high, focus on redo volume and commit rate, not this event.',
+    fixAction: 'No direct fix — do not tune in isolation. Address only via the paired log file sync / log file parallel write findings (reduce commit frequency, faster redo storage). Engage DBA if redo throughput is the bottleneck.',
+  },
+  'SGA: allocation forcing component growth': {
+    mechanism: 'A memory request could not be satisfied from a dynamic SGA component, so Automatic Shared/Memory Management (ASMM/AMM) must grow that component by shrinking another. Sessions stall while the SGA resize operation runs. Frequent occurrences indicate SGA resize thrashing between shared pool and buffer cache.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['shared_pool_size', 'buffer_cache_size'],
+    addmKeywords: ['SGA', 'ASMM', 'memory resize', 'shared pool'],
+    oracleNote: 'Check V$SGA_RESIZE_OPS for resize frequency. Repeated grow/shrink cycles waste time and cause stalls — set minimum floors for the thrashing components.',
+    fixQuery: "-- Recent SGA resize operations (thrashing indicator)\nSELECT component, oper_type, oper_mode,\n  ROUND(initial_size/1024/1024) init_mb, ROUND(final_size/1024/1024) final_mb,\n  start_time, end_time\nFROM v$sga_resize_ops ORDER BY start_time DESC FETCH FIRST 20 ROWS ONLY;\n\n-- Current dynamic component sizes and floors\nSELECT name, value FROM v$parameter\nWHERE name IN ('sga_target','memory_target','db_cache_size','shared_pool_size');",
+    fixExpect: 'Many resize ops cycling the same two components (e.g., shared pool growing while buffer cache shrinks) = thrashing.',
+    fixAction: 'Set minimum floors (e.g., DB_CACHE_SIZE and SHARED_POOL_SIZE) under ASMM so the resized components cannot collapse, which stops the thrash. Confirm SGA is adequately sized overall. Engage DBA before adjusting memory parameters.',
+  },
+
+  // -- NETWORK / APPLICATION (commonly seen, previously uncatalogued) --
+  'SQL*Net break/reset to client': {
+    mechanism: 'The server is sending a break or reset to the client — typically because a statement raised an ORA- error, a query/cursor was cancelled, or the application aborted mid-operation. This is an application-behaviour signal, not a database I/O problem.',
+    waitClass: 'Application',
+    diagnosticMetrics: ['executes', 'parse_calls'],
+    addmKeywords: ['SQL*Net', 'break', 'reset', 'application error'],
+    oracleNote: 'High counts almost always mean the application is throwing errors or cancelling statements (e.g., query timeouts, ORA-00942/ORA-01013). Fix the app behaviour, not the network.',
+    fixQuery: "-- Where the breaks/resets concentrate (by module/action) via ASH\nSELECT module, action, COUNT(*) samples\nFROM v$active_session_history\nWHERE event = 'SQL*Net break/reset to client'\n  AND sample_time > SYSDATE - 1/24\nGROUP BY module, action ORDER BY samples DESC FETCH FIRST 15 ROWS ONLY;\n\n-- Correlate with error counts if instrumented\nSELECT sql_id, executions, fetches, end_of_fetch_count\nFROM v$sql WHERE parsing_schema_name <> 'SYS'\nORDER BY executions DESC FETCH FIRST 15 ROWS ONLY;",
+    fixExpect: 'Concentration in a specific module/action = that application component is cancelling or erroring. end_of_fetch_count low vs executions = cursors abandoned before full fetch.',
+    fixAction: 'Engage the application team: investigate query timeouts, statement cancellations, and unhandled ORA- errors in the identified module. Review client-side fetch/timeout settings. Not a storage or DB-tuning issue.',
+  },
+  'SQL*Net more data to client': {
+    mechanism: 'The server is shipping additional network packets (SDU-sized chunks) of a large result set back to the client. Time here reflects result-set size and network throughput between server and client, not database processing.',
+    waitClass: 'Network',
+    diagnosticMetrics: ['executes', 'rows_processed'],
+    addmKeywords: ['SQL*Net', 'network', 'result set', 'SDU'],
+    oracleNote: 'High values usually mean large result sets, a small SDU, or a slow/latent network link. Often the real fix is returning fewer rows.',
+    fixQuery: "-- SQL returning the most rows / data to clients\nSELECT sql_id, executions, rows_processed,\n  ROUND(rows_processed/NULLIF(executions,0)) rows_per_exec, module\nFROM v$sql\nWHERE rows_processed > 100000 AND executions > 0\nORDER BY rows_processed DESC FETCH FIRST 15 ROWS ONLY;\n\n-- Current SDU / network settings\nSELECT name, value FROM v$parameter WHERE name IN ('sdu','default_sdu_size');",
+    fixExpect: 'High rows_per_exec = application pulling large result sets. Increasing SDU (sqlnet.ora) helps bulk transfers; reducing rows returned helps more.',
+    fixAction: 'Reduce data volume: add row-limiting/pagination, return only needed columns, or aggregate server-side. For legitimate bulk transfers, increase SDU and array fetch size. Verify network latency/bandwidth between tiers.',
+  },
+
+  // -- PROCESS / CONCURRENCY (commonly seen, previously uncatalogued) --
+  'os thread startup': {
+    mechanism: 'Time spent spawning a new OS process/thread for a foreground session, a parallel-query slave, or a background process (e.g., Jnnn). High values mean the OS is slow to create processes — usually a connection storm, no connection pooling, or OS process-table/resource pressure.',
+    waitClass: 'Concurrency',
+    diagnosticMetrics: ['logons', 'sessions'],
+    addmKeywords: ['process', 'thread startup', 'connection', 'PX slave'],
+    oracleNote: 'Frequent dedicated-server logoffs/logons (no pooling) is the classic cause. Bursts also appear when many PX slaves spawn at once.',
+    fixQuery: "-- Logon storm indicator\nSELECT name, value FROM v$sysstat WHERE name IN ('logons cumulative','logons current');\n\n-- Process headroom vs limit\nSELECT resource_name, current_utilization, max_utilization, limit_value\nFROM v$resource_limit WHERE resource_name IN ('processes','sessions');\n\n-- Are PX slaves being spawned heavily?\nSELECT name, value FROM v$sysstat WHERE name LIKE 'Parallel operations%';",
+    fixExpect: 'High logons cumulative growth over the interval = connection storm (no pooling). processes near limit_value = OS/instance process pressure.',
+    fixAction: 'Implement application connection pooling (or DRCP) to stop per-request process creation. For PX-driven bursts, review parallel_max_servers and statement parallelism. Check OS process limits with the sysadmin.',
+  },
+  'reliable message': {
+    mechanism: 'A session is waiting on a reliable channel (KSR) message — an internal broadcast/acknowledgement mechanism used by many operations such as cross-instance coordination, AQ, dynamic remastering, and dictionary/space operations. Often a symptom rather than the root cause; the real work is happening in whatever published the message.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes'],
+    addmKeywords: ['KSR', 'channel', 'broadcast', 'cross-instance'],
+    oracleNote: 'Identify the channel via the wait parameters / ASH to find the true driver. Common drivers: AQ, GES/RAC operations, ALTER SYSTEM, space management.',
+    fixQuery: "-- What is driving the reliable message waits (channel + SQL) via ASH\nSELECT p1, p2, sql_id, module, COUNT(*) samples\nFROM v$active_session_history\nWHERE event = 'reliable message'\n  AND sample_time > SYSDATE - 1/24\nGROUP BY p1, p2, sql_id, module\nORDER BY samples DESC FETCH FIRST 15 ROWS ONLY;",
+    fixExpect: 'The dominant sql_id/module reveals the operation publishing the messages (often AQ dequeue, DDL, or a RAC coordination action).',
+    fixAction: 'Treat as a pointer: tune the underlying operation identified in ASH (e.g., AQ workload, frequent ALTER SYSTEM, or RAC remastering). Rarely actionable on its own. Engage DBA if RAC/GES coordination is implicated.',
+  },
+  'enq: PS - contention': {
+    mechanism: 'Parallel Slave (PS) enqueue contention — sessions competing to acquire and coordinate parallel-execution slaves. Occurs when many concurrent parallel queries fight for a limited PX slave pool, or when slaves are allocated/deallocated rapidly.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['executes', 'parallel_operations'],
+    addmKeywords: ['parallel', 'PX', 'PS enqueue', 'slave allocation'],
+    oracleNote: 'Strongly correlated with high concurrent DOP and parallel_max_servers pressure. Downgraded parallel statements often accompany this.',
+    fixQuery: "-- PX server pool utilization and downgrades\nSELECT name, value FROM v$sysstat\nWHERE name IN ('Parallel operations not downgraded','Parallel operations downgraded to serial','Parallel operations downgraded 75 to 99 pct');\nSELECT name, value FROM v$parameter WHERE name IN ('parallel_max_servers','parallel_servers_target','parallel_degree_policy');\n\n-- Current PX activity\nSELECT qcsid, COUNT(*) slaves FROM v$px_session GROUP BY qcsid ORDER BY slaves DESC;",
+    fixExpect: 'High downgrade counts + this event = PX demand exceeds parallel_max_servers. Many distinct qcsid with large slave counts = concurrency of parallel statements is high.',
+    fixAction: 'Reduce parallel concurrency: lower per-statement DOP, use parallel statement queuing (parallel_degree_policy / parallel_servers_target), or schedule heavy parallel jobs apart. Engage DBA before changing PX parameters.',
+  },
+  'enq: TX - contention': {
+    mechanism: 'Generic transaction (TX) enqueue contention reported without a more specific sub-reason. A session is blocked waiting for a transaction-level lock held by another session. The specific flavour is one of: row lock contention, index/ITL contention, ITL allocation, or unique/PK conflict — resolve by identifying the blocker.',
+    waitClass: 'Application',
+    diagnosticMetrics: ['block_changes', 'executes'],
+    addmKeywords: ['TX enqueue', 'lock', 'blocking', 'transaction'],
+    oracleNote: 'Always identify the blocking session and the exact object/row. The fix depends on the sub-cause: long transactions, hot rows, low INITRANS, or unindexed FKs.',
+    fixQuery: "-- Blocking tree for TX waits\nSELECT s.sid, s.serial#, s.username, s.event,\n  s.blocking_session, s.seconds_in_wait, s.sql_id,\n  o.object_name, s.row_wait_obj#\nFROM v$session s LEFT JOIN dba_objects o ON o.object_id = s.row_wait_obj#\nWHERE s.event LIKE 'enq: TX%'\nORDER BY s.seconds_in_wait DESC;\n\n-- The blocker's current/last statement\nSELECT sid, serial#, username, status, sql_id, prev_sql_id, seconds_in_wait\nFROM v$session WHERE sid IN (SELECT blocking_session FROM v$session WHERE event LIKE 'enq: TX%');",
+    fixExpect: 'blocking_session points to the holder. row_wait_obj# / object_name reveals the contended segment. Long seconds_in_wait = sustained blocking.',
+    fixAction: 'Identify and address the blocker: shorten long transactions, commit sooner, remove hot-row update patterns, raise INITRANS / lower PCTFREE for ITL pressure, and index foreign keys to avoid TM/TX escalation. Engage app team for transaction redesign.',
+  },
+
+  // -- STORAGE / FILE I/O (commonly seen, previously uncatalogued) --
+  'Disk file operations I/O': {
+    mechanism: 'Time spent on file metadata operations — opening, closing, identifying, or resizing database files. Normally low. Elevated values point to a very large number of files, frequent file opens (e.g., dedicated-server connection storms each opening files), or slow filesystem metadata operations.',
+    waitClass: 'User I/O',
+    diagnosticMetrics: ['physical_reads', 'logons'],
+    addmKeywords: ['file open', 'file operation', 'metadata'],
+    oracleNote: 'Usually benign. If high, correlate with logon rate (each new process opens files) or an unusually large datafile count.',
+    fixQuery: "-- File count and connection rate (drivers of file-open overhead)\nSELECT COUNT(*) datafiles FROM v$datafile;\nSELECT COUNT(*) tempfiles FROM v$tempfile;\nSELECT name, value FROM v$sysstat WHERE name IN ('logons cumulative','logons current');",
+    fixExpect: 'Very high datafile count and/or rapidly growing logons cumulative = the source of file-operation overhead.',
+    fixAction: 'Reduce process churn via connection pooling/DRCP. Consolidate excessive small datafiles (consider bigfile tablespaces). Verify filesystem/ASM metadata performance with the storage admin if latency is high.',
+  },
+  'db file async I/O submit': {
+    mechanism: 'Time the foreground/DBWR spends submitting asynchronous I/O requests to the OS. On most platforms this is near-zero; on some (notably AIX, or when async I/O is misconfigured/emulated), submission itself becomes costly and shows up as a wait.',
+    waitClass: 'System I/O',
+    diagnosticMetrics: ['physical_reads', 'physical_writes'],
+    addmKeywords: ['async I/O', 'DBWR', 'aio'],
+    oracleNote: 'Check that real async I/O is enabled and not emulated. DISK_ASYNCH_IO=TRUE and FILESYSTEMIO_OPTIONS=SETALL are prerequisites; OS aio servers must be sized.',
+    fixQuery: "-- Async I/O configuration\nSELECT name, value FROM v$parameter\nWHERE name IN ('disk_asynch_io','filesystemio_options','dbwr_io_slaves','db_writer_processes');\n\n-- DBWR write pressure\nSELECT event, total_waits, ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event WHERE event IN ('db file async I/O submit','db file parallel write')\nORDER BY total_waits DESC;",
+    fixExpect: 'filesystemio_options not SETALL, or disk_asynch_io FALSE = async I/O not fully enabled, inflating submit time.',
+    fixAction: 'Enable true async I/O: FILESYSTEMIO_OPTIONS=SETALL and DISK_ASYNCH_IO=TRUE (engage DBA/sysadmin). On AIX, size aio_maxservers appropriately. Avoid DBWR_IO_SLAVES when native async I/O is available.',
+  },
+  'Data file init write': {
+    mechanism: 'Oracle is writing initialization (zeroed) blocks to newly allocated datafile space — during datafile creation, autoextend, or RESIZE. The session extending the segment waits while the new file blocks are formatted on disk.',
+    waitClass: 'User I/O',
+    diagnosticMetrics: ['extent_allocation', 'physical_writes'],
+    addmKeywords: ['autoextend', 'datafile', 'resize', 'init write'],
+    oracleNote: 'Spikes during frequent small autoextend operations. Pre-sizing datafiles or using larger autoextend increments avoids repeated initialization stalls.',
+    fixQuery: "-- Autoextend configuration and recent growth\nSELECT tablespace_name, file_name,\n  ROUND(bytes/1024/1024) mb, autoextensible,\n  ROUND(maxbytes/1024/1024) max_mb, ROUND(increment_by*8192/1024/1024,1) increment_mb\nFROM dba_data_files WHERE autoextensible = 'YES'\nORDER BY increment_mb ASC;",
+    fixExpect: 'Small increment_mb on actively growing tablespaces = many tiny autoextend events, each causing init-write stalls.',
+    fixAction: 'Pre-allocate datafile space ahead of growth, or set a larger NEXT/autoextend increment so extensions are infrequent. Consider bigfile tablespaces / ASM. Engage DBA to right-size datafiles.',
+  },
+  'ASM file metadata operation': {
+    mechanism: 'A foreground or background process is waiting on ASM metadata I/O — file create, extend, delete, or open against ASM-managed storage. Normally infrequent; spikes during file creation/extension, tablespace growth, or ASM rebalance activity.',
+    waitClass: 'Other',
+    diagnosticMetrics: ['extent_allocation', 'physical_writes'],
+    addmKeywords: ['ASM', 'metadata', 'rebalance', 'file extend'],
+    oracleNote: 'Correlate with datafile growth and ASM rebalance. Sustained values can indicate ASM metadata contention or an in-progress rebalance competing for I/O.',
+    fixQuery: "-- Is an ASM rebalance running? (run on the ASM instance)\n-- SELECT group_number, operation, state, est_minutes FROM v$asm_operation;\n\n-- DB-side: recent datafile growth driving ASM file ops\nSELECT tablespace_name, file_name, ROUND(bytes/1024/1024) mb, autoextensible\nFROM dba_data_files WHERE autoextensible = 'YES' ORDER BY bytes DESC FETCH FIRST 15 ROWS ONLY;",
+    fixExpect: 'Active V$ASM_OPERATION rows = rebalance is consuming I/O. Frequent autoextend = repeated metadata operations.',
+    fixAction: 'Schedule ASM rebalance during low activity and tune ASM power limit. Pre-size datafiles to reduce extend frequency. Engage the storage/ASM DBA if metadata latency persists.',
+  },
+
+  // -- RAC / CLUSTER (commonly seen, previously uncatalogued) --
+  'gc current block 3-way': {
+    mechanism: 'In RAC, the current (read-write) copy of a block required a 3-hop transfer: requesting instance to master to holding instance and back. The extra hop adds interconnect latency on top of a normal 2-way transfer. Indicates the block master and holder are different instances from the requester.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['gc_blocks_received', 'interconnect_latency'],
+    addmKeywords: ['RAC', 'global cache', '3-way', 'interconnect'],
+    oracleNote: 'Avg should be a few ms. High avg = interconnect latency/congestion. High volume = hot blocks bouncing across 3 instances (poor data/affinity locality).',
+    fixQuery: "-- Global cache transfer latency by class\nSELECT inst_id, class, cr_block, current_block,\n  ROUND(current_block_time/NULLIF(current_block,0),2) avg_curr_ms\nFROM gv$instance_cache_transfer\nORDER BY current_block DESC FETCH FIRST 15 ROWS ONLY;\n\n-- Interconnect health\nSELECT name, value FROM gv$sysstat WHERE name LIKE 'gc%lost%' OR name LIKE 'gc%congested%';",
+    fixExpect: 'High avg_curr_ms = interconnect latency. gc blocks lost > 0 = network drops needing NIC/switch investigation.',
+    fixAction: 'Verify interconnect: private network bandwidth, jumbo frames, no packet loss (gc blocks lost = 0). Reduce cross-instance block bouncing via service-to-instance affinity / partitioning so hot blocks stay local. Engage RAC/network admin.',
+  },
+  'gc cr block 3-way': {
+    mechanism: 'In RAC, a consistent-read (CR) version of a block required a 3-hop transfer (requester to master to holder and back). The holding instance builds the CR image and ships it, adding interconnect latency. Signals the master and holder are remote from the requester.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['gc_blocks_received', 'interconnect_latency'],
+    addmKeywords: ['RAC', 'global cache', 'CR', '3-way', 'interconnect'],
+    oracleNote: 'Like its current-block sibling: a few ms is normal. Elevated avg = interconnect; high volume = read-hot blocks fetched across instances. CR builds also consume CPU on the serving instance.',
+    fixQuery: "-- CR transfer latency by class\nSELECT inst_id, class, cr_block,\n  ROUND(cr_block_time/NULLIF(cr_block,0),2) avg_cr_ms\nFROM gv$instance_cache_transfer\nORDER BY cr_block DESC FETCH FIRST 15 ROWS ONLY;\n\n-- Segments hottest for global cache traffic\nSELECT * FROM (SELECT object_name, statistic_name, value\nFROM gv$segment_statistics WHERE statistic_name LIKE 'gc%'\nORDER BY value DESC) WHERE ROWNUM <= 15;",
+    fixExpect: 'High avg_cr_ms = interconnect latency or busy serving LMS. Top gc segments reveal which objects drive cross-instance reads.',
+    fixAction: 'Reduce cross-instance read traffic via affinity/partitioning of the hot segments. Verify interconnect health and LMS (GCS_SERVER_PROCESSES) is not CPU-starved. Engage RAC admin.',
+  },
+  'gc current grant busy': {
+    mechanism: 'A RAC instance requested a grant to read a block into its cache, but the grant was delayed because the block needs creation/formatting (e.g., a new block above the high-water mark) or a remote instance is busy with it. Combines global-cache coordination with block-busy contention.',
+    waitClass: 'Cluster',
+    diagnosticMetrics: ['gc_blocks_received', 'block_changes'],
+    addmKeywords: ['RAC', 'global cache', 'grant', 'busy', 'high-water mark'],
+    oracleNote: 'Often tied to concurrent inserts across instances pushing the high-water mark, or hot segments being formatted. Look at segment-level gc statistics and insert concurrency.',
+    fixQuery: "-- Segments with highest global-cache grant/busy activity\nSELECT * FROM (SELECT object_name, statistic_name, value\nFROM gv$segment_statistics\nWHERE statistic_name LIKE 'gc%busy%' OR statistic_name LIKE 'gc%current%'\nORDER BY value DESC) WHERE ROWNUM <= 15;\n\n-- Cross-instance insert concurrency\nSELECT inst_id, COUNT(*) active_inserts FROM gv$session\nWHERE status='ACTIVE' AND sql_id IS NOT NULL GROUP BY inst_id;",
+    fixExpect: 'Top segments under gc busy = objects with cross-instance insert/format contention (often sequence-driven PK inserts).',
+    fixAction: 'Spread block formatting: increase freelists/ASSM benefit, partition hot insert segments, or use service affinity so inserts to a segment originate from one instance. For sequence-driven hot inserts, enlarge CACHE / consider NOORDER. Engage RAC admin.',
+  },
 };
 
 function _warnDuplicateWaitCatalogKeysFromSource() {
@@ -4670,6 +5069,36 @@ function _warnDuplicateWaitCatalogKeysFromSource() {
 }
 
 _warnDuplicateWaitCatalogKeysFromSource();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CATALOG RESOLVER — single source of truth for every WAIT_EVENT_CATALOG lookup.
+// Catalog keys are deliberately MIXED-CASE: some are lowercase ('db file sequential
+// read', 'enq: ko - fast object checkpoint') and some are canonical Oracle-cased
+// ('enq: TX - row lock contention', 'SQL*Net message from client'). A raw bracket
+// lookup is therefore fragile — it silently misses whenever the AWR-parsed event
+// name's casing differs from the stored key. resolveWaitCatalog() normalizes both
+// sides, and when no exact key matches it falls back to the longest catalog key the
+// event name starts with on a word boundary — so RAC/variant suffixes still resolve
+// (e.g. 'gc current block 2-way (something)' -> 'gc current block 2-way') without
+// ever guessing across unrelated events. Returns the catalog entry or null.
+let _waitCatLowerIndex = null;
+function resolveWaitCatalog(name) {
+  if (!name || typeof WAIT_EVENT_CATALOG === 'undefined') return null;
+  const raw = String(name).trim();
+  if (WAIT_EVENT_CATALOG[raw]) return WAIT_EVENT_CATALOG[raw];
+  const lc = raw.toLowerCase();
+  if (!_waitCatLowerIndex) {
+    _waitCatLowerIndex = {};
+    for (const k of Object.keys(WAIT_EVENT_CATALOG)) _waitCatLowerIndex[k.toLowerCase()] = WAIT_EVENT_CATALOG[k];
+  }
+  if (_waitCatLowerIndex[lc]) return _waitCatLowerIndex[lc];
+  // Conservative word-boundary prefix fallback (longest key wins) for variant suffixes.
+  let best = null, bestLen = 0;
+  for (const k in _waitCatLowerIndex) {
+    if (k.length > bestLen && lc.startsWith(k + ' ')) { best = _waitCatLowerIndex[k]; bestLen = k.length; }
+  }
+  return best;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WAIT EVENT DIAGNOSTIC ENGINE
@@ -6008,7 +6437,8 @@ function selectKeyMetrics(primarySignals, allDeltas) {
     const usedMetrics = new Set();
 
     if (primary.type === 'wait_event') {
-        const catalog = WAIT_EVENT_CATALOG[primary.metric];
+        // Catalog keys are mixed-case; metric carries the raw cased event_name.
+        const catalog = resolveWaitCatalog(primary.metric);
         if (catalog && catalog.diagnosticMetrics) {
             // Catalog-known: use diagnostic metrics that actually changed
             for (const dm of catalog.diagnosticMetrics) {
@@ -6287,6 +6717,7 @@ function detectCausalPatterns(ctx, verdict) {
                     { icon: '📡', text: `Top wait event: ${topWait} (${topWaitCls} class)` },
                 ],
                 direction: `${cand.sqlId} is the primary source of ${topWait} — the wait event is not independent, it is generated by this SQL's I/O pattern. Fix the SQL access path first.`,
+                fixQuery: `-- Confirm ${cand.sqlId} owns the I/O: its wait events + hot objects (ASH)\nSELECT h.event, o.object_name, COUNT(*) samples\nFROM dba_hist_active_sess_history h\nLEFT JOIN dba_objects o ON o.object_id = h.current_obj#\nWHERE h.sql_id = '${cand.sqlId}'\n  AND h.snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY h.event, o.object_name\nORDER BY samples DESC FETCH FIRST 10 ROWS ONLY;`,
             });
             break; // only report the strongest causal link
         }
@@ -6303,6 +6734,7 @@ function detectCausalPatterns(ctx, verdict) {
                     { icon: '⏱', text: `SQL accounts for ${n0(cand.elShare)}% of elapsed time but is waiting, not executing` },
                 ],
                 direction: `${cand.sqlId} is waiting on a shared resource, not the bottleneck itself. Fix the source of ${topWait} (latch, lock, or buffer contention) — SQL tuning will not resolve this.`,
+                fixQuery: `-- Confirm ${cand.sqlId} is a victim: what it waits on and who blocks it (ASH)\nSELECT h.event, h.blocking_session, COUNT(*) samples\nFROM dba_hist_active_sess_history h\nWHERE h.sql_id = '${cand.sqlId}'\n  AND h.session_state = 'WAITING'\n  AND h.snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY h.event, h.blocking_session\nORDER BY samples DESC FETCH FIRST 10 ROWS ONLY;`,
             });
             break;
         }
@@ -6335,6 +6767,7 @@ function detectCausalPatterns(ctx, verdict) {
                     { icon: '🔑', text: `${dmlCand.sqlId} is DML, consuming ${n1(dmlCand.pctDb)}% DB Time` },
                 ],
                 direction: `${dmlCand.sqlId} is generating the block change volume that is driving redo/commit pressure. log file sync is a side effect of this SQL's write rate, not an independent problem. Reduce commit frequency or DML batch size on this SQL first.`,
+                fixQuery: `-- Confirm ${dmlCand.sqlId} drives the redo: its DML volume in the AWR window\nSELECT sql_id, SUM(executions_delta) execs, SUM(rows_processed_delta) rows_done,\n  ROUND(SUM(buffer_gets_delta)/NULLIF(SUM(executions_delta),0)) gets_per_exec\nFROM dba_hist_sqlstat\nWHERE sql_id = '${dmlCand.sqlId}'\n  AND snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY sql_id;\n\n-- Commit cadence vs redo (is this commit-in-loop?)\nSELECT name, value FROM v$sysstat\nWHERE name IN ('user commits','redo size','redo entries');`,
             });
         }
     }
@@ -6358,6 +6791,7 @@ function detectCausalPatterns(ctx, verdict) {
                 { icon: dbwrSaturation ? '⚠' : '✓', text: `Physical writes ${dbwrSaturation ? 'flat/down ('+n0(physWritesDelta)+'%) — DBWR throughput is the bottleneck' : 'increased (+'+n0(physWritesDelta)+'%) — write volume grew, may need more DB_WRITER_PROCESSES'}` },
             ],
             direction: `These two waits share a root cause — DBWR write throughput. Treating them as independent findings would lead to duplicate investigations. Check DB_WRITER_PROCESSES, I/O subsystem throughput, and DB_CACHE_SIZE as a single investigation.`,
+            fixQuery: `-- Confirm DBWR is the limiter: write latency + writer config\nSELECT event, total_waits,\n  ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event IN ('db file parallel write','free buffer waits','write complete waits');\nSELECT name, value FROM v$parameter WHERE name IN ('db_writer_processes','dbwr_io_slaves');\n\n-- Is the cache undersized? read_factor near 1.0 = adequate\nSELECT size_for_estimate cache_mb, ROUND(estd_physical_read_factor,2) read_factor\nFROM v$db_cache_advice WHERE name='DEFAULT' ORDER BY size_for_estimate;`,
         });
     }
 
@@ -6379,6 +6813,7 @@ function detectCausalPatterns(ctx, verdict) {
                 { icon: '📉', text: `Soft Parse %: ${n1(effGood.soft_parse_pct||0)}% → ${n1(effBad.soft_parse_pct||0)}% (${n1(softParseDelta)}pp) — same trend, different measurement` },
             ],
             direction: `Hard parse spike, library cache miss, and soft parse drop are three measurements of the same failure — SQL is not being reused. Root cause: literals in SQL text (not bind variables) or CURSOR_SHARING=EXACT with parameterized queries. Fix: enforce bind variables at the application layer. Do NOT investigate these as three separate performance problems.`,
+            fixQuery: `-- Confirm literals (not binds) are exploding the cursor cache\nSELECT SUBSTR(sql_text,1,60) sql_preview, COUNT(*) literal_variants,\n  SUM(parse_calls) parses, SUM(executions) execs\nFROM v$sqlarea\nWHERE parse_calls > executions * 0.5 AND plan_hash_value != 0\nGROUP BY SUBSTR(sql_text,1,60)\nHAVING COUNT(*) > 5\nORDER BY literal_variants DESC FETCH FIRST 20 ROWS ONLY;`,
         });
     }
 
@@ -6407,6 +6842,7 @@ function detectCausalPatterns(ctx, verdict) {
                     { icon: '📊', text: `Combined DB Time: ${n1(totalPct)}%` },
                 ],
                 direction: `These SQLs are siblings from the same module — this is a batch job or scheduled task regression, not individual SQL problems. Tune at the module/job level: check if the batch job's data volume grew, its schedule changed, or a supporting object (index, statistics) was modified.`,
+                fixQuery: `-- The SQLs from module "${mod}" active in the problem window (tune as a set)\nSELECT h.sql_id, COUNT(*) ash_samples,\n  ROUND(COUNT(*)*10/60,1) est_active_mins\nFROM dba_hist_active_sess_history h\nWHERE h.module = '${mod}'\n  AND h.snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY h.sql_id\nORDER BY ash_samples DESC FETCH FIRST 15 ROWS ONLY;`,
             });
             break; // report only the strongest module group
         }
@@ -6825,6 +7261,7 @@ function detectCausalPatterns(ctx, verdict) {
                     { icon: '🔄', text: `The performance profile shifted — these are different problems, not the same one evolving` },
                 ],
                 direction: `The old bottleneck (${_goodTopName}) was resolved or reduced, but a new bottleneck (${_badTopName}) now dominates. This is a bottleneck shift, not a regression of the same issue. Investigate ${_badTopName} as a fresh problem — do not assume it was masked by the previous bottleneck.`,
+                fixQuery: `-- Confirm the shift in TIME terms (not just %): each event's wait-time delta\nSELECT event_name,\n  ROUND((MAX(time_waited_micro)-MIN(time_waited_micro))/1e6,1) delta_secs\nFROM dba_hist_system_event\nWHERE snap_id IN (&good_snap_end, &bad_snap_end)\n  AND dbid = (SELECT dbid FROM v$database)\n  AND event_name IN ('${_goodTopName}','${_badTopName}')\nGROUP BY event_name\nORDER BY delta_secs DESC;`,
             });
         }
     }
@@ -6927,6 +7364,71 @@ function detectCausalPatterns(ctx, verdict) {
                 signals: _signals16,
                 direction: `Concurrent INSERTs into ${_hotSegName} are hitting two serialization points: (1) ITL slot exhaustion causes buffer busy waits \u2014 multiple sessions cannot modify the same block simultaneously because INITRANS is too low. (2) High-water mark extension (enq: HW) is required to allocate new blocks, which itself triggers single-block reads as Oracle reads extent map and new blocks.${_seqReadPctP16 > 3 ? ' The db file sequential read waits ('+n1(_seqReadPctP16)+'%) are a SYMPTOM of HWM extension, not an independent storage problem \u2014 do not investigate storage.' : ''} Fix: ALTER TABLE ${_hotSegName} INITRANS 8 PCTFREE 20. If ASSM is not enabled on the tablespace, enable it. Pre-allocate extents to reduce HWM extension: ALTER TABLE ${_hotSegName} ALLOCATE EXTENT (SIZE 100M). For very high concurrency, consider hash-partitioning the table to distribute HWM contention across partitions.`,
                 fixQuery: `-- Check current INITRANS and space management\nSELECT table_name, ini_trans, pct_free, pct_used,\n  tablespace_name, num_rows, blocks, avg_row_len\nFROM dba_tables\nWHERE table_name = '${_hotSegName.toUpperCase()}';\n\n-- Check tablespace segment space management (ASSM vs MSSM)\nSELECT tablespace_name, segment_space_management, extent_management\nFROM dba_tablespaces\nWHERE tablespace_name IN (\n  SELECT tablespace_name FROM dba_tables WHERE table_name = '${_hotSegName.toUpperCase()}'\n);\n\n-- ITL waits from ASH during problem window\nSELECT h.current_obj#, o.object_name, h.event,\n  h.p1text, h.p2text, h.p3text, COUNT(*) ash_samples\nFROM dba_hist_active_sess_history h\nLEFT JOIN dba_objects o ON o.object_id = h.current_obj#\nWHERE h.event IN ('buffer busy waits', 'enq: HW - contention')\n  AND h.snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY h.current_obj#, o.object_name, h.event, h.p1text, h.p2text, h.p3text\nORDER BY ash_samples DESC FETCH FIRST 15 ROWS ONLY;\n\n-- Check extent allocation history\nSELECT segment_name, segment_type, extents, bytes/1024/1024 size_mb,\n  blocks, initial_extent, next_extent\nFROM dba_segments\nWHERE segment_name = '${_hotSegName.toUpperCase()}';`,
+            });
+        }
+    }
+
+    // ── Pattern 17: DIRECT_PATH_CHECKPOINT — direct-path reads force object checkpoint ─
+    // A SQL doing direct path reads (full scans / parallel / bulk DML re-reads) on an
+    // object that was just modified forces Oracle to flush that object's dirty buffers to
+    // disk FIRST, via an object-level checkpoint. The enq: KO - fast object checkpoint
+    // enqueue serialises that flush. The wait grows with (a) the volume of dirty blocks
+    // on the object and (b) storage WRITE speed (DBWR / db file parallel write) — it is
+    // NOT a commit-frequency problem and NOT an optimizer/plan problem. This is the
+    // classic batch signature where the plan is optimal but the run is slow on busier or
+    // slower storage. The high log file sync that often rides alongside is a co-symptom
+    // of the same write pressure, not an independent commit bottleneck.
+    {
+        const _koPct   = waitBadPct('fast object checkpoint');
+        const _koAlt   = waitBadPct('enq: ko');
+        const _koEvPct = Math.max(_koPct, _koAlt);
+        const _wcwPct  = waitBadPct('write complete waits');
+        const _dprPct  = waitBadPct('direct path read');
+        const _dbpwPct = waitBadPct('db file parallel write');
+        const _fbwPctP17 = waitBadPct('free buffer waits');
+        const _koEv = badWaits.find(w => /fast object checkpoint|enq: ko/i.test(w.event_name||''));
+        const _koName = _koEv ? (_koEv.event_name || 'enq: KO - fast object checkpoint') : 'enq: KO - fast object checkpoint';
+        const _dmlCandP17 = candidates.find(c => /update|insert|delete|merge/i.test(c.sqlText||''));
+        const _ioCandP17  = candidates.find(c => (c.ioPctBad||0) > 50);
+        const _blkChgDeltaP17 = (() => {
+            const d = allDeltas['lp_block_changes'] || allDeltas['Block changes'] || allDeltas['Block Changes/Sec'];
+            return d ? (d.delta_pct || 0) : 0;
+        })();
+        // Trigger: KO is highly specific to this mechanism (fires even at low %), OR a
+        // write-complete signature co-occurs with direct-path reads / bulk DML. Gated so a
+        // pure OLTP commit-storm (no KO, no write-complete-waits) never trips this.
+        const _koSig  = _koEvPct >= 1.5;
+        const _wcwSig = _wcwPct >= 2 && (_dprPct >= 1 || !!_dmlCandP17);
+        if (_koSig || _wcwSig) {
+            const _sigs17 = [];
+            if (_koEvPct >= 0.3) _sigs17.push({ icon: '🧱', text: `${_koName}: ${n1(_koEvPct)}% DB Time — direct-path reads are forcing an object-level checkpoint before the scan can proceed` });
+            if (_wcwPct >= 0.3) _sigs17.push({ icon: '✍', text: `write complete waits: ${n1(_wcwPct)}% DB Time — sessions blocked while DBWR finishes writing the object's dirty blocks` });
+            if (_dprPct >= 0.3) _sigs17.push({ icon: '📖', text: `direct path read: ${n1(_dprPct)}% DB Time — the bulk read that triggers the checkpoint (the read itself is the symptom, not the cost)` });
+            if (_dbpwPct >= 0.3) _sigs17.push({ icon: '💿', text: `db file parallel write: ${n1(_dbpwPct)}% DB Time — DBWR write latency governs how long the checkpoint takes; slower storage = longer KO wait` });
+            if (_fbwPctP17 >= 1) _sigs17.push({ icon: '🪣', text: `free buffer waits: ${n1(_fbwPctP17)}% DB Time — the same write pressure is also starving the buffer cache` });
+            if (_blkChgDeltaP17 > 30) _sigs17.push({ icon: '📝', text: `Block changes/sec +${n0(_blkChgDeltaP17)}% — fresh DML is producing the dirty blocks that must be flushed` });
+            if (_dmlCandP17) _sigs17.push({ icon: '🔑', text: `${_dmlCandP17.sqlId} is bulk DML (${n1(_dmlCandP17.pctDb||0)}% DB Time) on the object being re-read` });
+            _sigs17.push({ icon: '⚠', text: `This is a WRITE / checkpoint / storage cost — not commit frequency and not a bad plan. Batching commits or adding optimizer hints will not move it.` });
+            patterns.push({
+                id: 'DIRECT_PATH_CHECKPOINT',
+                label: `Object checkpoint from direct-path reads — write/storage bound, not commit frequency`,
+                confidence: _koEvPct >= 5 ? 'PROBABLE' : 'POSSIBLE',
+                sql: _dmlCandP17 ? _dmlCandP17.sqlId : (_ioCandP17 ? _ioCandP17.sqlId : null),
+                signals: _sigs17,
+                direction: `Direct-path reads on a just-modified object force an object-level checkpoint (${_koName}) — a write/storage cost, not commit frequency or a bad plan.`,
+                chain: [
+                    `Direct-path read touches blocks the same object's DML just dirtied`,
+                    `Oracle must flush those dirty buffers first \u2192 ${_koName}`,
+                    `Checkpoint duration = dirty-block volume \u00F7 storage write speed (db file parallel write) \u2014 the plan can't change this`,
+                    `log file sync riding alongside is the same write pressure, not an independent commit problem`,
+                ],
+                fix: [
+                    `Don't chase commit frequency or add optimizer hints \u2014 the plan isn't the bottleneck`,
+                    `Sequence the job so heavy DML and the direct-path read of the same object don't overlap, or reorg/rebuild the object first`,
+                    `Confirm storage is the limiter: db file parallel write latency in V$SYSTEM_EVENT`,
+                    `Connect to DB and check ASH (P1/P2) for which object's KO enqueue dominates before committing to a change`,
+                ],
+                fixQuery: `-- Step 1: Confirm the object-checkpoint / write-latency signature\nSELECT event, total_waits, time_waited,\n  ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event IN ('enq: KO - fast object checkpoint','write complete waits',\n                'db file parallel write','free buffer waits','direct path read')\nORDER BY time_waited DESC;\n\n-- Step 2: Which object is being checkpointed (KO enqueue) via ASH in the bad window\nSELECT o.owner, o.object_name, o.object_type, COUNT(*) ash_samples\nFROM dba_hist_active_sess_history h\nJOIN dba_objects o ON o.object_id = h.current_obj#\nWHERE h.event = 'enq: KO - fast object checkpoint'\n  AND h.snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY ash_samples DESC FETCH FIRST 10 ROWS ONLY;\n\n-- Step 3: Dirty-block / write pressure per segment\nSELECT * FROM (\n  SELECT object_name, statistic_name, value\n  FROM v$segment_statistics\n  WHERE statistic_name IN ('physical writes','physical writes direct','direct reads')\n  ORDER BY value DESC\n) WHERE ROWNUM <= 15;`,
             });
         }
     }
@@ -7923,7 +8425,7 @@ function buildDataDrivenVerdict(ctx) {
     // Stage 1: extract all signals in one call (each is O(n) over its domain)
     const { allDeltas, primarySignals, keyMetrics } = _computeSignals(ctx);
     const primary = primarySignals[0];
-    const catalog = primary.type === 'wait_event' ? WAIT_EVENT_CATALOG[primary.metric] : null;
+    const catalog = primary.type === 'wait_event' ? resolveWaitCatalog(primary.metric) : null;
     const cpus = ctx.meta?.cpu_count || 1;
     const aasG = ctx.aas?.good || 0;
     const aasB = ctx.aas?.bad || 0;
@@ -8544,16 +9046,24 @@ function buildDataDrivenVerdict(ctx) {
     // TRIGGER 3 — DBWR Instance Activity Stats spike
     // Reads from the backend-computed dbwr_activity (set by _compare_dbwr_activity_stats).
     const _dbwrAct = (ctx._raw?.report || {}).dbwr_activity || {};
-    if (_dbwrAct.spike_detected) {
+    if (_dbwrAct.spike_detected || _dbwrAct.write_pressure_ratio_flag) {
         const _ckStat = _dbwrAct.stats && _dbwrAct.stats.dbwr_checkpoint_written;
         const _dirtyS = _dbwrAct.stats && _dbwrAct.stats.dirty_buffers_inspected;
         const _freeBufS = _dbwrAct.stats && _dbwrAct.stats.free_buffer_inspected;
+        const _ratioBad = _dbwrAct.dirty_to_written_ratio_bad || 0;
         contextNotes.push(
-            '\u26a0 DBWR WRITE VOLUME SPIKE: \u201cDBWR checkpoint buffers written\u201d rate increased '
-            + num(_dbwrAct.spike_pct, 0) + '% in the bad period'
-            + (_ckStat ? ' (' + num(_ckStat.good_per_sec, 1) + '/s \u2192 ' + num(_ckStat.bad_per_sec, 1) + '/s)' : '') + '. '
+            (_dbwrAct.spike_detected
+                ? '\u26a0 DBWR WRITE VOLUME SPIKE: \u201cDBWR checkpoint buffers written\u201d rate increased '
+                  + num(_dbwrAct.spike_pct, 0) + '% in the bad period'
+                  + (_ckStat ? ' (' + num(_ckStat.good_per_sec, 1) + '/s \u2192 ' + num(_ckStat.bad_per_sec, 1) + '/s)' : '') + '. '
+                : '\u26a0 DBWR SATURATION: ')
             + (_dirtyS && _dirtyS.delta_pct > 20 ? 'Dirty buffers inspected also \u0394+' + num(_dirtyS.delta_pct, 0) + '%. ' : '')
             + (_freeBufS && _freeBufS.delta_pct > 20 ? 'Free buffer inspected \u0394+' + num(_freeBufS.delta_pct, 0) + '%. ' : '')
+            + (_ratioBad >= 2.0
+                ? 'DBWR saturation ratio: ' + num(_dirtyS?.bad_total || 0, 0) + ' dirty buffers inspected vs '
+                  + num(_ckStat?.bad_total || 0, 0) + ' actually written = ' + _ratioBad.toFixed(2) + 'x \u2014 DBWR '
+                  + 'scanned ~' + _ratioBad.toFixed(1) + ' dirty buffers for every one it could flush. '
+                : '')
             + 'Cause-effect chain: more dirty buffers \u2192 DBWR cannot flush fast enough '
             + '\u2192 free buffer waits \u2192 sessions stall. '
             + 'This is the PRIMARY driver of free buffer waits \u2014 address write throughput first.'
@@ -13635,7 +14145,7 @@ function _renderRCAVerdictTabular(report, ctx) {
     const waitDiag = ev => {
         // KB-first: pull mechanism from WAIT_EVENT_CATALOG when available
         if (ev && typeof WAIT_EVENT_CATALOG !== 'undefined') {
-            const exactEntry = WAIT_EVENT_CATALOG[ev];
+            const exactEntry = resolveWaitCatalog(ev);
             if (exactEntry && exactEntry.mechanism) {
                 const m = exactEntry.mechanism.replace(/<[^>]*>/g, '').split(/[.!]/)[0].trim();
                 if (m && m.length > 4) return m.substring(0, 90) + (m.length > 90 ? '...' : '');
@@ -17676,6 +18186,26 @@ function generateComparisonAISummary(ctx) {
                     <div style="font-size:10.5px;color:#94a3b8;line-height:1.6">${esc(s.text)}</div>
                 </div>`
             ).join('');
+            // Structured root-cause chain (preferred, short + scannable). Falls back to the
+            // old single "Therefore:" paragraph for patterns not yet converted to this schema.
+            const therefore = (p.chain && p.chain.length) ? `
+                <div style="margin-top:7px;padding:7px 10px;background:rgba(15,23,42,0.5);border-radius:4px">
+                    <div style="font-size:8.5px;font-weight:800;color:#38bdf8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px">Root Cause Chain</div>
+                    ${p.chain.map((step, i) => `<div style="display:grid;grid-template-columns:14px 1fr;gap:6px;padding:2px 0">
+                        <span style="font-size:9.5px;font-weight:800;color:#38bdf8">${i + 1}</span>
+                        <span style="font-size:10.5px;color:#7dd3fc;line-height:1.55">${esc(step)}</span>
+                    </div>`).join('')}
+                </div>
+                ${(p.fix && p.fix.length) ? `<div style="margin-top:6px;padding:7px 10px;background:rgba(34,197,94,0.05);border-radius:4px">
+                    <div style="font-size:8.5px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px">Fix</div>
+                    ${p.fix.map(f => `<div style="display:grid;grid-template-columns:12px 1fr;gap:6px;padding:2px 0">
+                        <span style="font-size:10px;color:#4ade80">\u2192</span>
+                        <span style="font-size:10.5px;color:#a7f3d0;line-height:1.55">${esc(f)}</span>
+                    </div>`).join('')}
+                </div>` : ''}`
+                : `<div style="margin-top:7px;padding:6px 10px;background:rgba(15,23,42,0.5);border-radius:4px;font-size:10px;color:#7dd3fc;line-height:1.6">
+                    <span style="color:#38bdf8;font-weight:700">Therefore: </span>${esc(p.direction)}
+                </div>`;
             const fixBlock = p.fixQuery ? (() => {
                 const fqId = 'fq-' + Math.random().toString(36).slice(2,8);
                 return `<div style="margin-top:6px">
@@ -17693,9 +18223,7 @@ function generateComparisonAISummary(ctx) {
                     ${refBadge}${sqlBadge}
                 </div>
                 ${bullets}
-                <div style="margin-top:7px;padding:6px 10px;background:rgba(15,23,42,0.5);border-radius:4px;font-size:10px;color:#7dd3fc;line-height:1.6">
-                    <span style="color:#38bdf8;font-weight:700">Therefore: </span>${esc(p.direction)}
-                </div>
+                ${therefore}
                 ${fixBlock}
             </div>`;
         }).join('');
@@ -19047,7 +19575,7 @@ function renderSinglePELayers(data) {
     // ── 4. PE NARRATIVE ───────────────────────────────────────────────────────
     const topWaitName = _w0 ? _w0.event_name : '';
     const topWaitPct  = _w0 ? (_w0.pct_db_time||0) : 0;
-    const catWaitEv   = (typeof WAIT_EVENT_CATALOG!=='undefined') ? (WAIT_EVENT_CATALOG[topWaitName]||null) : null;
+    const catWaitEv   = resolveWaitCatalog(topWaitName);
 
     let part1 = topWaitName ? `<b>${esc(topWaitName)}</b> is the top wait event, consuming <b>${f1s(topWaitPct)}%</b> of DB Time. ` : '';
     if (domSql && domSqlPct >= 10) {
@@ -20176,6 +20704,48 @@ function _renderFindingCard(f, idx, btn2, topSqlId, topWaitName) {
 function _structuredDiagnosticPlaceholder() {
 }
 
+// Renders the "Performance Architect — Root-Cause Intelligence" panel in the
+// RCA Verdict tab. Pulls compareData.scenario_findings (structural patterns the
+// engine recognised from the AWR) and explains WHY the metrics moved. A prior
+// expert fix is folded into the recommended action ONLY when the pattern match
+// is strong (>= 80%); past incidents are never shown as a standalone gallery.
+function renderScenarioIntel() {
+    const el = document.getElementById('rca-scenario-intel');
+    if (!el) return;
+    const findings = (typeof compareData !== 'undefined' && compareData && Array.isArray(compareData.scenario_findings))
+        ? compareData.scenario_findings : [];
+    if (!findings.length) { el.innerHTML = ''; return; }
+
+    const sevColor = { critical: '#f87171', warning: '#fbbf24', info: '#7dd3fc' };
+    const header = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="#a78bfa" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></span>
+        <span style="font-size:13px;font-weight:800;color:#a78bfa;text-transform:uppercase;letter-spacing:1px">Performance Architect — Root-Cause Intelligence</span>
+        <span style="font-size:10px;color:#64748b;margin-left:auto">${findings.length} pattern${findings.length>1?'s':''} identified</span>
+    </div>`;
+
+    const body = findings.map(f => {
+        const col = sevColor[f.severity] || '#7dd3fc';
+        const ident = [f.sql_id, (f.tables||[]).filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+        const ev = (f.evidence||[]).map(e=>`<li style="margin-bottom:3px">${esc(e)}</li>`).join('');
+        const recFix = String(f.recommended_fix||'').trim();
+        const conf = f.reference_confidence ? Math.round(f.reference_confidence*100) : 0;
+        return `<div style="background:rgba(15,23,42,0.55);border:1px solid #1e293b;border-left:3px solid ${col};border-radius:8px;padding:13px 15px;margin-bottom:11px">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
+                <span style="font-size:13px;font-weight:700;color:#e2e8f0">${esc(f.title||'Pattern identified')}</span>
+                <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:${col};background:${col}1a;border:1px solid ${col}55;padding:1px 8px;border-radius:10px;white-space:nowrap">${esc(f.severity||'info')}</span>
+            </div>
+            ${ident?`<div style="font-size:10px;color:#64748b;margin-bottom:8px;font-family:ui-monospace,monospace">${esc(ident)}</div>`:''}
+            ${f.why?`<div style="font-size:11.5px;color:#cbd5e1;line-height:1.6;margin-bottom:9px"><span style="color:#f59e0b;font-weight:800">Why it happened — </span>${esc(f.why)}</div>`:''}
+            ${ev?`<div style="font-size:11px;color:#94a3b8;margin-bottom:9px"><div style="color:#64748b;font-weight:700;margin-bottom:3px">Evidence from this AWR</div><ul style="margin:0;padding-left:16px;line-height:1.5">${ev}</ul></div>`:''}
+            ${recFix
+                ? `<div style="font-size:11.5px;color:#e2e8f0;line-height:1.5;background:rgba(16,185,129,0.07);border:1px solid rgba(52,211,153,0.25);border-radius:6px;padding:8px 10px"><span style="color:#34d399;font-weight:800">✓ Recommended fix — </span>${esc(recFix)}<div style="font-size:9px;color:#64748b;margin-top:5px">Drawn from a prior resolution of the same signature · ${conf}% match</div></div>`
+                : (f.confirm?`<div style="font-size:11.5px;color:#e2e8f0;line-height:1.5;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);border-radius:6px;padding:8px 10px"><span style="color:#7dd3fc;font-weight:800">Next step — </span>${esc(f.confirm)}</div>`:'')}
+        </div>`;
+    }).join('');
+
+    el.innerHTML = `<div class="card p-4 mb-4 fade-in" style="border:1px solid rgba(167,139,250,0.22);background:linear-gradient(135deg,rgba(46,16,101,0.22),rgba(15,23,42,0.4))">${header}${body}</div>`;
+}
+
 function renderComparisonRCA(ctx) {
 
     // === ALL DATA FROM AWRContext ===
@@ -20340,6 +20910,9 @@ function renderComparisonRCA(ctx) {
             <div id="pe-narrative-deterministic">${compNarrative}</div>
         </div>
 
+        <!-- KB CROSS-REFERENCE — past expert incidents matching this bottleneck -->
+        <div id="rca-scenario-intel"></div>
+
         <!-- --- INTELLIGENCE ENGINE ANCHOR — filled async by startIntelligencePoller --- -->
         <div id="rca-intel-anchor" style="margin-bottom:16px"></div>
 
@@ -20359,6 +20932,10 @@ function renderComparisonRCA(ctx) {
         <div id="rca-next-action-anchor"></div>
 
     `;
+
+    // KB cross-reference: surface past expert incidents that match the flagged
+    // bottleneck (SQL_ID / wait / bottleneck class) from backend/data/kb_digest.md.
+    try { renderScenarioIntel(); } catch (e) { console.warn('renderScenarioIntel failed', e); }
 
 
     // --- Render the RCA verdict (Confidence Scorecard, intelligence body,
@@ -24920,8 +25497,61 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
             }
         }
 
-        // Limit to 4 factors for a clean 2×2 grid; first 4 are highest priority
-        const _wfShow = _wfInd.slice(0, 4);
+        // ── One unified converging story — fold recognised scenario patterns ──
+        // Every structural pattern the engine recognised (compareData.scenario_findings)
+        // becomes a contributing factor converging on the SAME root cause, so the
+        // panel tells ONE story instead of a separate disconnected list. De-duplicated
+        // against the root-cause wait and the wait-class factors so nothing is
+        // restated; severity orders them (critical → warning → info). Best-effort —
+        // a failure here must never break the panel.
+        try {
+            const _scnRaw = (typeof compareData !== 'undefined' && compareData && Array.isArray(compareData.scenario_findings))
+                ? compareData.scenario_findings : [];
+            if (_scnRaw.length) {
+                const _scnCol  = { critical: '#ef4444', warning: '#f59e0b', info: '#38bdf8' };
+                const _scnRank = { critical: 0, warning: 1, info: 2 };
+                const _strip   = s => String(s || '').replace(/<[^>]*>/g, '').toLowerCase();
+                const _rootLc  = _strip(topWaitName);
+                const _seen    = _wfInd.map(f => _strip(f.name));
+                [..._scnRaw]
+                    .sort((a, b) => (_scnRank[a.severity] ?? 3) - (_scnRank[b.severity] ?? 3))
+                    .forEach(s => {
+                        const _nm = String(s.title || '').trim();
+                        if (!_nm) return;
+                        const _nmLc = _strip(_nm);
+                        // skip echoes of the root cause or an already-listed factor
+                        if (_rootLc && _nmLc.includes(_rootLc)) return;
+                        if (_seen.some(e => e && (e.includes(_nmLc) || _nmLc.includes(e)))) return;
+                        const _col   = _scnCol[s.severity] || '#a78bfa';
+                        const _ident = [s.sql_id, (s.tables || []).filter(Boolean).join(', ')].filter(Boolean).join(' \u00B7 ');
+                        const _ev    = (s.evidence || []).filter(Boolean).map(String);
+                        const _why   = String(s.why || '').trim();
+                        const _conf  = s.reference_confidence ? Math.round(s.reference_confidence * 100) : 0;
+                        const _fix   = String(s.recommended_fix || '').trim();
+                        const _chain = [
+                            _ev.length ? _ev.map(e => esc(e)).join(' \u00B7 ') : '',
+                            (_fix && _conf >= 80) ? `Prior fix (${_conf}% match): ${esc(_fix)}` : ''
+                        ].filter(Boolean).join('<br>');
+                        _wfInd.push({
+                            name:   esc(_nm),
+                            desc:   esc(_why || (_ev[0] || 'Structural pattern recognised in this AWR comparison.')),
+                            metric: esc(_ident || String(s.severity || 'pattern').toUpperCase()),
+                            mag:    null,
+                            color:  _col,
+                            chain:  _chain || undefined,
+                            _scenario: true
+                        });
+                        _seen.push(_nmLc);
+                    });
+            }
+        } catch (_e) { /* folding is best-effort — never break the panel */ }
+
+        // Wait/dimension factors keep the original 4-card priority; recognised
+        // scenario patterns are appended so ALL findings converge on one root
+        // cause (total capped at 8 for a readable funnel).
+        const _wfNonScn = _wfInd.filter(f => !f._scenario).slice(0, 4);
+        const _wfScn    = _wfInd.filter(f =>  f._scenario);
+        const _wfShow   = _wfNonScn.concat(_wfScn).slice(0, 8);
         // Normalisation base for the per-card impact-weight bar (Δpp magnitude)
         const _wfMaxMag = Math.max(1, ..._wfShow.map(f => Math.abs(f.mag || 0)));
 
@@ -24977,9 +25607,30 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         // The "execution count amplification" clause is asserted ONLY when the
         // exec-swing factor actually qualified (F1) — never as an unbacked claim.
         const _wExecAmplified = (_wExDPct != null && _wExDPct > 15 && _wDatVol < 15);
+        // For a pure-DML SQL the root cause MUST follow the actual dominant wait, not assume
+        // DBWR. log file sync = LGWR/commit redo path; free buffer waits / write complete waits /
+        // db file parallel write = DBWR buffer-cache flush; enq: KO = object checkpoint from
+        // direct-path reads; db file reads = read I/O. Asserting "DBWR cannot flush dirty buffers"
+        // for a log file sync symptom is mechanically wrong and contradicts a commit/redo wait.
         const _wRcDetail = _dt.isPureDML
-            ? ('DBWR cannot flush dirty buffers to disk fast enough to keep pace with the write volume'
-               + (_wExecAmplified ? ' driven by execution count amplification' : '') + '.')
+            ? (() => {
+                const _twn = (topWaitName || '').toLowerCase();
+                const _amp = _wExecAmplified ? ' Execution count amplification is a contributing factor.' : '';
+                if (/free buffer waits|write complete waits|db file parallel write|buffer busy/.test(_twn))
+                    return 'DBWR cannot flush dirty buffers to disk fast enough to keep pace with the write volume'
+                        + (_wExecAmplified ? ' driven by execution count amplification' : '') + '.';
+                if (/fast object checkpoint|enq: ko/.test(_twn))
+                    return 'Direct-path reads on a freshly-modified object force an object-level checkpoint (enq: KO \u2014 fast object checkpoint): Oracle must flush that object\u2019s dirty blocks to disk before the scan can read them. The cost is set by dirty-block volume and storage write speed, not by the SQL plan.' + _amp;
+                if (/log file sync|log file parallel write|log buffer/.test(_twn))
+                    return 'The commit / redo path is the binding constraint \u2014 each COMMIT blocks until LGWR flushes the redo buffer to the log files. This is governed by redo volume per commit and redo-log I/O latency, NOT by the buffer-cache writer (DBWR).' + _amp;
+                if (/direct path read/.test(_twn))
+                    return 'The DML\u2019s direct-path reads are the dominant wait \u2014 bulk read throughput (and any object checkpoint they trigger), not buffer-cache writes.' + _amp;
+                if (/db file sequential read|db file scattered read/.test(_twn))
+                    return 'Single/multi-block read latency dominates \u2014 the DML is I/O-bound on reads, not on buffer-cache writes.' + _amp;
+                // Fallback: name the wait honestly instead of assuming a mechanism.
+                return (topWaitName ? esc(topWaitName) + ' is the dominant wait for this DML' : 'This DML is the dominant workload')
+                    + ' \u2014 confirm the binding resource (redo/commit, buffer-cache writes, or read I/O) against the database before acting.' + _amp;
+              })()
             : _finalPv === 'HW_ENQUEUE_CONTENTION'
                 ? ('Concurrent DML is extending the segment High Water Mark simultaneously \u2014 Oracle serialises HWM extension via the HW enqueue.'
                    + (_wSegCorrob && _wSegName && ['physical_writes','direct_writes'].includes(_wSegMetric)
@@ -25638,6 +26289,15 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         `${_dt.isPureDML ? _dmlFalsHtml : _falsHtml}`+
         `</div>`;
 
+    // One unified converging story: the recognised scenario patterns are now
+    // folded into the "Contributing Factors" funnel above, so remove the separate
+    // flat "Performance Architect" list to avoid a disconnected duplicate. Only
+    // when the structured panel actually rendered (otherwise the flat list is the
+    // only place those findings appear and must stay).
+    if (_whyStructuredHtml) {
+        try { const _siEl = document.getElementById('rca-scenario-intel'); if (_siEl) _siEl.innerHTML = ''; } catch (_e) {}
+    }
+
     // "Not Yet Proven" block suppressed — confidence label + reason text
     // already communicate diagnostic uncertainty; the checklist items
     // (ADDM-not-run, ASH-not-incorporated) are not PE-actionable in an
@@ -25726,6 +26386,23 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
                 riskBlock: part3 || '',
             }
         );
+    }
+
+    // DEV-MODE + ctx stamp: audit the 4-part Diagnostic Quality Contract for THIS verdict.
+    // Generalises across all customers/AWRs — catches confident-but-vague output before it
+    // ships, and records a per-verdict quality score the dashboard can surface later.
+    if (typeof validateConclusiveness === 'function') {
+        try {
+            ctx._diagnosticQuality = validateConclusiveness({
+                verdict:   (rds && rds.finalLabel) || (ctx.evidence && ctx.evidence.primaryVerdict) || '',
+                mechanism: (_mechText && _mechText.full) || '',
+                sections: {
+                    whatHappened: (part1 || '') + (confidenceBlock || ''),
+                    whyHappened:  part2 || '',
+                    riskBlock:    part3 || '',
+                }
+            });
+        } catch (_e) { /* non-fatal — auditing must never break rendering */ }
     }
 
     // ── Cross-Panel Awareness — RCA knows what other panels display ──
@@ -28589,7 +29266,7 @@ function _buildCommonRow(c, i) {
               '<div style="color:#f59e0b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px">ASH Intelligence</div>' +
               (ashEvt ? '<div style="font-size:11px;color:#e2e8f0;margin-bottom:3px"><span style="color:#94a3b8">Top Wait:</span> <span style="font-weight:700;color:#fbbf24">' + esc(ashEvt) + '</span>' +
                 // Wire WAIT_EVENT_CATALOG into ASH top wait — show mechanism inline
-                (function(){ var _ac=(typeof WAIT_EVENT_CATALOG!=='undefined')?(WAIT_EVENT_CATALOG[ashEvt]||null):null;
+                (function(){ var _ac=resolveWaitCatalog(ashEvt);
                   if(!_ac) return '';
                   return '<div style="margin-top:4px;font-size:10px;color:#94a3b8;line-height:1.5;padding:5px 8px;background:rgba(15,23,42,0.7);border-left:2px solid #f59e0b;border-radius:0 4px 4px 0">' +
                     '<span style="color:#fbbf24;font-weight:700;font-size:9px">What this means: </span>' + esc(_ac.mechanism.split('.')[0]+'.') +
@@ -29573,12 +30250,45 @@ function renderSQLComparison(ctx) {
     const _goodCov = Array.from(engine.goodSqlMap.values()).reduce((s,e) => s + (e.pctDbTime||0), 0);
     const _badCov  = Array.from(engine.badSqlMap.values()).reduce((s,e) => s + (e.pctDbTime||0), 0);
 
+    // ── 0-common sanity guard ────────────────────────────────────────────────
+    // Two AWR reports from the same database over adjacent windows ALWAYS share
+    // recurring SQL. If the engine sees zero shared sql_id while both sides have
+    // SQL, the good-period dataset on screen is almost certainly stale or
+    // mismatched (e.g. left over from a previous upload). Surface it loudly
+    // instead of silently mislabelling every common SQL as "new".
+    let _staleBanner = '';
+    {
+        const _gIds = new Set(engine.goodSqlMap.keys());
+        let _rawCommon = 0;
+        engine.badSqlMap.forEach((_v, id) => { if (_gIds.has(id)) _rawCommon++; });
+        const _bothHaveSql = engine.goodSqlMap.size > 0 && engine.badSqlMap.size > 0;
+        const _gDb = String(engine.goodData?.db_name || '').trim();
+        const _bDb = String(engine.badData?.db_name || '').trim();
+        const _sameDb = _gDb && _bDb && _gDb.toUpperCase() === _bDb.toUpperCase();
+        const _gSnap = `${engine.goodData?.begin_snap ?? '?'}\u2013${engine.goodData?.end_snap ?? '?'}`;
+        const _bSnap = `${engine.badData?.begin_snap ?? '?'}\u2013${engine.badData?.end_snap ?? '?'}`;
+        if (_bothHaveSql && _rawCommon === 0) {
+            _staleBanner = `<div style="background:rgba(127,29,29,0.35);border:1px solid #ef4444;border-left:4px solid #ef4444;border-radius:8px;padding:12px 16px;margin-bottom:14px">
+                <div style="color:#f87171;font-weight:800;font-size:12px;margin-bottom:4px">\u26a0 0 shared SQLs between the two reports \u2014 results are not trustworthy</div>
+                <div style="color:#fca5a5;font-size:11px;line-height:1.6">
+                    ${esc(lbl1)} (${esc(_gDb||'?')}, snaps ${esc(_gSnap)}) and ${esc(lbl2)} (${esc(_bDb||'?')}, snaps ${esc(_bSnap)}) have <b>no SQL ID in common</b>.
+                    ${_sameDb
+                        ? 'Both reports are from the <b>same database</b>, so they must share recurring SQL \u2014 the good-period data shown is <b>stale or mismatched</b> (likely left over from an earlier upload). Every common SQL is being mislabelled as "new".'
+                        : 'The two reports may be from <b>different databases</b>, or one side\u2019s data is stale. A cross-database comparison cannot attribute regressions.'}
+                    <br><b style="color:#fde68a">Action:</b> hard-refresh (Ctrl+Shift+R) and re-upload <b>both</b> files together, then re-run the comparison.
+                </div>
+            </div>`;
+        }
+    }
+
     document.getElementById('sql-content').innerHTML = `
 
         <h2 class="text-xl font-bold text-white mb-1">SQL Analysis: ${esc(lbl1)} vs ${esc(lbl2)}</h2>
 
         <p class="text-xs text-Cmuted mb-2">${engine.goodSqlMap.size} SQLs in ${esc(lbl1)} &nbsp;|&nbsp; ${engine.badSqlMap.size} in ${esc(lbl2)} &nbsp;|&nbsp; ${_filteredCommon.length} common &nbsp;&mdash;&nbsp; Click column headers to sort</p>
         <p class="text-xs text-gray-600 mb-4 italic">AWR captured top ${engine.goodSqlMap.size} SQLs by elapsed time (${num(_goodCov,1)}% of DB Time) in ${esc(lbl1)} and top ${engine.badSqlMap.size} (${num(_badCov,1)}% of DB Time) in ${esc(lbl2)}</p>
+
+        ${_staleBanner}
 
 
 
@@ -32785,7 +33495,7 @@ function renderWaitComparison(ctx) {
 
     const allNames=[...new Set([...ev1.map(e=>e.event_name),...ev2.map(e=>e.event_name)])];
 
-    const rows=allNames.map(n=>{const e1=map1[n]||{},e2=ev2.find(e=>e.event_name===n)||{};return{name:n,pct1:e1.pct_db_time||0,pct2:e2.pct_db_time||0,avg1:e1.avg_wait_ms||0,avg2:e2.avg_wait_ms||0,w1:e1.total_waits||0,w2:e2.total_waits||0,wc:e1.wait_class||e2.wait_class||''};}).sort((a,b)=>Math.max(b.pct1,b.pct2)-Math.max(a.pct1,a.pct2)).slice(0,25);
+    const rows=allNames.map(n=>{const e1=map1[n]||{},e2=ev2.find(e=>e.event_name===n)||{};return{name:n,pct1:e1.pct_db_time||0,pct2:e2.pct_db_time||0,avg1:e1.avg_wait_ms||0,avg2:e2.avg_wait_ms||0,w1:e1.total_waits||0,w2:e2.total_waits||0,t1:e1.time_waited_secs||0,t2:e2.time_waited_secs||0,wc:e1.wait_class||e2.wait_class||''};}).sort((a,b)=>Math.max(b.pct1,b.pct2)-Math.max(a.pct1,a.pct2)).slice(0,25);
 
     // ── Cross-Panel Intelligence: read verdict + SQL correlation ──
     const _v = ctx.verdict || {};
@@ -33004,6 +33714,13 @@ function renderWaitComparison(ctx) {
             @keyframes hsDrainFlash { 0%,100% { box-shadow:0 0 4px rgba(244,63,94,0.5),0 0 0 1px rgba(244,63,94,0.35); opacity:1; } 50% { box-shadow:0 0 13px rgba(244,63,94,0.95),0 0 0 1px rgba(244,63,94,0.8); opacity:0.82; } }
             .hs-drain-flash { display:inline-block; animation:hsDrainFlash 1.15s ease-in-out infinite; }
             @media (prefers-reduced-motion: reduce) { .hs-drain-flash { animation:none; } }
+            /* Ambient-light flash for the Max Regression summary card when its segment is RCA-linked */
+            @keyframes hsRcaCardFlash {
+                0%,100% { box-shadow:0 0 0 1px rgba(244,63,94,0.35), 0 0 11px rgba(244,63,94,0.18), inset 0 0 14px rgba(244,63,94,0.05); border-color:rgba(244,63,94,0.40); }
+                50%     { box-shadow:0 0 0 1px rgba(244,63,94,0.80), 0 0 28px rgba(244,63,94,0.55), inset 0 0 22px rgba(244,63,94,0.12); border-color:rgba(244,63,94,0.85); }
+            }
+            .hs-rca-card-flash { animation:hsRcaCardFlash 1.6s ease-in-out infinite; }
+            @media (prefers-reduced-motion: reduce) { .hs-rca-card-flash { animation:none; } }
             /* Tabular grid lines — column + row separators for scan-ability (dashboard-design) */
             .hs-main-table { border-collapse:collapse; }
             .hs-main-table > thead > tr > th { border-bottom:2px solid rgba(148,163,184,0.22) !important; background:rgba(148,163,184,0.035); }
@@ -33085,11 +33802,12 @@ function renderWaitComparison(ctx) {
                 <div style="display:flex;align-items:center;gap:8px">
                     <span style="font-size:9px;color:#475569">Sort:</span>
                     <select id="wait-sort-select" onchange="_sortWaitTable(this.value)" style="font-size:9px;color:#c7d2fe;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:2px 6px;cursor:pointer">
+                        <option value="tdelta" selected>Δ Total Wait Time (priority)</option>
                         <option value="max_pct">Max % DB Time</option>
                         <option value="pct2">Bad % DB Time</option>
-                        <option value="delta">Delta ↑ (biggest increase)</option>
-                        <option value="delta_asc">Delta ↓ (most improved)</option>
-                        <option value="avg2">Avg Wait Bad (ms)</option>
+                        <option value="delta">Δ Share ↑ (biggest %-point increase)</option>
+                        <option value="delta_asc">Δ Share ↓ (most improved)</option>
+                        <option value="avg2">Avg Latency Bad (ms)</option>
                         <option value="w2">Occurrences (Bad)</option>
                         <option value="name">Event Name A→Z</option>
                     </select>
@@ -33097,6 +33815,17 @@ function renderWaitComparison(ctx) {
                 </div>
             </div>
 
+            <div style="padding:5px 12px;border-bottom:1px solid #0f172a;font-size:9px;color:#64748b;line-height:1.6;background:rgba(15,23,42,0.4)">
+                <b style="color:#94a3b8">Reading this table:</b>
+                <span style="color:#cbd5e1">% DB Time</span> = share of DB time, good → bad (normalised) ·
+                <span style="color:#cbd5e1">Total Time (Δ)</span> = <b style="color:#f8b4b4">absolute</b> cumulative seconds (Σ waits × latency), good → bad — the true impact ·
+                <span style="color:#cbd5e1">Avg Latency / wait</span> = ms per <b>single</b> wait, good → bad (slower each = storage / contention) ·
+                <span style="color:#cbd5e1">Occurrences</span> = how many waits, good → bad (more = higher volume).
+                Sorted by largest Total-Time increase. <span style="color:#475569">A share (Δ) can fall while absolute time rises — that is why Total Time, not % delta, drives priority.</span>
+                <div style="margin-top:5px;padding:4px 8px;background:rgba(245,158,11,0.07);border-left:2px solid rgba(245,158,11,0.5);border-radius:3px;color:#cbd5e1">
+                    <b style="color:#fbbf24">Why hours in a 30-min report?</b> Total Time is summed across <b>all sessions</b>, so it is normally far larger than the snapshot window. Example: a 30-min AWR showing <b>194h</b> means ~388 sessions were waiting on this event at the same time on average (194h ÷ 0.5h). This is expected — it is cumulative DB wait time, <b>not</b> wall-clock elapsed time.
+                </div>
+            </div>
             <style>
                 #wait-events-table tr[data-name][style*="cursor:pointer"]:hover { background:rgba(56,189,248,0.04) !important; }
                 #wait-events-table tr.wait-expanded { background:rgba(56,189,248,0.06) !important; }
@@ -33111,10 +33840,10 @@ function renderWaitComparison(ctx) {
                     <th>Class</th>
                     <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('pct1');document.getElementById('wait-sort-select').value='pct2'" title="Sort by Baseline %">${esc(lbl1)} % <span style="opacity:0.4;font-size:9px">↕</span></th>
                     <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('pct2');document.getElementById('wait-sort-select').value='pct2'" title="Sort by Problem %">${esc(lbl2)} % <span style="opacity:0.4;font-size:9px">↕</span></th>
-                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('delta');document.getElementById('wait-sort-select').value='delta'" title="Sort by Delta">Delta <span style="opacity:0.4;font-size:9px">↕</span></th>
-                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('avg1')" title="Sort by Baseline Latency">${esc(lbl1)} Avg(ms) <span style="opacity:0.4;font-size:9px">↕</span></th>
-                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('avg2');document.getElementById('wait-sort-select').value='avg2'" title="Sort by Bad period latency">${esc(lbl2)} Avg(ms) <span style="opacity:0.4;font-size:9px">↕</span></th>
-                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('w2');document.getElementById('wait-sort-select').value='w2'" title="Sort by occurrences in bad period">Occur (Bad) <span style="opacity:0.4;font-size:9px">↕</span></th>
+                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('delta');document.getElementById('wait-sort-select').value='delta'" title="Share delta = Bad %DB-Time − Good %DB-Time (percentage points). This can SHRINK even when absolute wait time grows, because total DB Time also changes. Use Total Time Δ for true impact.">Δ Share <span style="opacity:0.4;font-size:9px">↕</span></th>
+                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('tdelta');document.getElementById('wait-sort-select').value='tdelta'" title="Total wait time = Σ waits × avg latency (absolute cumulative seconds the DB spent in this event). Good → Bad and the Δ. This is the true priority signal.">Total Time (Δ) <span style="opacity:0.4;font-size:9px">↕</span></th>
+                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('avg2');document.getElementById('wait-sort-select').value='avg2'" title="Latency of a SINGLE wait (per-occurrence, NOT total/concurrent), shown ${esc(lbl1)} → ${esc(lbl2)}. Tells you whether each wait got slower (storage / contention) rather than just more frequent.">Avg Latency / wait <span style="opacity:0.4;font-size:9px">↕</span></th>
+                    <th style="cursor:pointer;user-select:none" onclick="_sortWaitTable('w2');document.getElementById('wait-sort-select').value='w2'" title="How many times the wait happened, shown ${esc(lbl1)} → ${esc(lbl2)}. More occurrences = higher volume; combined with latency it explains the Total-Time change.">Occurrences <span style="opacity:0.4;font-size:9px">↕</span></th>
                     <th>Assessment</th>
                 </tr></thead>
 
@@ -33123,20 +33852,52 @@ function renderWaitComparison(ctx) {
                     const _maxPctW=rows.reduce((m,r)=>Math.max(m,r.pct1||0,r.pct2||0),0);
                     const _hasDom=rows.some(r=>(r.pct2-r.pct1)>40);
                     const _fmtW5=n=>n<=0?'—':n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':n.toLocaleString();
-                    return rows.map(r=>{
+                    // Total wait time = ABSOLUTE cumulative seconds (Σ waits × avg latency).
+                    // This is the true priority signal: % DB Time is share-normalised (can
+                    // shrink while absolute time grows) and Avg(ms) is per-wait latency, not
+                    // total. Default render order = largest total-time increase first.
+                    const _fmtSecs=s=>{s=+s||0;return s<=0?'—':s<1?(s*1000).toFixed(0)+'ms':s<60?s.toFixed(0)+'s':s<3600?(s/60).toFixed(1)+'m':(s/3600).toFixed(1)+'h';};
+                    return [...rows].sort((a,b)=>((b.t2-b.t1)-(a.t2-a.t1))).map(r=>{
                         const d=r.pct2-r.pct1;
+                        const _tDelta=(r.t2||0)-(r.t1||0);  // absolute total-wait-time change (s)
+                        const _tRel=r.t1>0?(_tDelta/r.t1)*100:(_tDelta>0?999:0);  // relative total-time change (%)
+                        // True regression by absolute time: rose ≥10% and is non-trivial.
+                        const _timeUp=_tDelta>0&&_tRel>=10&&(r.t2>=60||r.pct2>=2);
+                        const _timeDn=_tDelta<0&&(-_tRel)>=10&&(r.t1>=60||r.pct1>=2);
                         const isMajor=d>10,isNotable=d>5,isImproved=d<-5;
                         // S2d: Throttled badge for Commit class with negative delta + upstream dominant event
                         const _isThr=/commit/i.test(r.wc||'')&&d<0&&_hasDom;
-                        const assess=_isThr?'Throttled ↓':(isMajor?'Major Increase':isNotable?'Notable Increase':isImproved?'Improved':'Stable');
-                        const assessCol=_isThr?'#f59e0b':(isMajor?'#f87171':isNotable?'#fbbf24':isImproved?'#4ade80':'#475569');
-                        const assessBg=_isThr?'rgba(245,158,11,0.08)':(isMajor?'rgba(239,68,68,0.1)':isNotable?'rgba(245,158,11,0.08)':isImproved?'rgba(74,222,128,0.08)':'rgba(71,85,105,0.08)');
-                        const leftBorder=isMajor?'border-left:3px solid #ef4444':isImproved?'border-left:3px solid #22c55e':'';
+                        // LATENCY SPIKE — independent signal from share (d) and total time (_tDelta).
+                        // Total time = occurrences × avg latency, so a latency blowup on a LOW-
+                        // occurrence event stays small in both share and total time and would
+                        // otherwise be silently bucketed as "Stable". This checks the per-wait
+                        // latency delta directly: either a >=50% relative jump on an already-
+                        // material latency (>=20ms), OR an already-huge absolute latency (>=1000ms
+                        // i.e. a full second per wait) that still grew >=10%, OR a brand-new event
+                        // whose latency alone is high (>=50ms) even with zero prior occurrences.
+                        const _latDelta=r.avg1>0?((r.avg2-r.avg1)/r.avg1)*100:(r.avg2>0?999:0);
+                        const _latNew=r.avg1<=0&&r.avg2>0;
+                        const _latUp=r.avg2>0&&((_latDelta>=50&&r.avg2>=20)||(r.avg2>=1000&&r.avg2>r.avg1*1.1)||(_latNew&&r.avg2>=50));
+                        // Assessment precedence: share-based labels first, then total-time
+                        // override so an event whose SHARE fell but whose ABSOLUTE time rose
+                        // is shown as "Rising (time ↑)" — never silently "Stable/Improved". Latency
+                        // Spike is checked before the final Stable fallback so a pure per-wait
+                        // latency regression is never buried when share/total-time stayed flat.
+                        let assess,assessCol,assessBg;
+                        if(_isThr){assess='Throttled ↓';assessCol='#f59e0b';assessBg='rgba(245,158,11,0.08)';}
+                        else if(isMajor){assess='Major Increase';assessCol='#f87171';assessBg='rgba(239,68,68,0.1)';}
+                        else if(isNotable){assess='Notable Increase';assessCol='#fbbf24';assessBg='rgba(245,158,11,0.08)';}
+                        else if(isImproved&&!_timeUp){assess='Improved';assessCol='#4ade80';assessBg='rgba(74,222,128,0.08)';}
+                        else if(_timeUp){assess='Rising (time ↑)';assessCol='#fbbf24';assessBg='rgba(245,158,11,0.08)';}
+                        else if(_timeDn){assess='Improved';assessCol='#4ade80';assessBg='rgba(74,222,128,0.08)';}
+                        else if(_latUp){assess=_latNew?'Latency Spike (new)':'Latency Spike';assessCol='#fb7185';assessBg='rgba(251,113,133,0.1)';}
+                        else{assess='Stable';assessCol='#475569';assessBg='rgba(71,85,105,0.08)';}
+                        const leftBorder=isMajor?'border-left:3px solid #ef4444':isImproved?'border-left:3px solid #22c55e':_latUp?'border-left:3px solid #fb7185':'';
                         const ann=_getWaitAnnotation(r.name,r.pct2,r.avg2);
                         // RCA linkage + impact gate — drives badge and default visibility
                         const _isRcaLinked = _rcaLinkedNames.has(r.name);
                         // Impactful = always shown; minor = hidden until user requests
-                        const _isImpactful = _isRcaLinked || r.pct2 >= 2 || Math.abs(d) > 3 || r.avg2 >= 20;
+                        const _isImpactful = _isRcaLinked || r.pct2 >= 2 || Math.abs(d) > 3 || r.avg2 >= 20 || _latUp;
                         const isMinor = !_isImpactful;
                         // S6c: bad avg ms color
                         const _avg2Col=r.avg2>=500?'#ef4444':r.avg2>=100?'#f97316':r.avg2>=10?'#fbbf24':'#475569';
@@ -33152,7 +33913,9 @@ function renderWaitComparison(ctx) {
                         // S2c: tooltip
                         let _tip='';
                         if(_isThr){_tip='Throughput dropped because sessions were blocked upstream, not because workload genuinely improved.';}
+                        else if(_timeUp){_tip=`⚠ Share of DB time moved ${d>=0?'+':''}${d.toFixed(1)}pp but ABSOLUTE wait time grew ${_tRel>=0?'+':''}${_tRel.toFixed(0)}% (${_fmtSecs(r.t1)} → ${_fmtSecs(r.t2)}). The % can fall while real time rises because total DB Time also grew — this event is getting worse, not better.`;}
                         else if(isImproved){const _clog=/commit/i.test(r.wc||'')||/log file sync/i.test(r.name||'');_tip=_clog&&_hasDom?'⚠ Latency dropped because fewer sessions reached this wait — upstream congestion likely. This is a symptom, not a resolution.':'✓ Genuine improvement — lower workload volume in bad period.';}
+                        else if(_latUp){_tip=_latNew?`⚠ This event is new in the bad period AND each occurrence already waits ${r.avg2.toFixed(1)}ms on average — low volume today, but every session that hits it pays a real cost. Watch for volume growth.`:`⚠ Per-wait latency jumped ${_latDelta>=0?'+':''}${_latDelta.toFixed(0)}% (${r.avg1.toFixed(1)}ms → ${r.avg2.toFixed(1)}ms) while share/total-time stayed flat — a classic sign of a degrading resource (storage device slowing, lock hold times growing) rather than more work being done. Volume-based metrics miss this because total time = occurrences × latency.`;}
                         // S8a: cross-link — enhanced with SQL↔Wait correlation from verdict engine
                         const _sqlLink=r.pct2>5&&/application|configuration/i.test(r.wc||'');
                         // Cross-panel: find SQLs that drive THIS wait event
@@ -33173,8 +33936,8 @@ function renderWaitComparison(ctx) {
                         const avgMsPill=r.avg2>0?`<span style="font-size:7.5px;color:${r.avg2>20?'#f87171':r.avg2>5?'#fbbf24':'#64748b'};background:rgba(15,23,42,0.6);border:1px solid ${r.avg2>20?'rgba(239,68,68,0.3)':r.avg2>5?'rgba(245,158,11,0.2)':'rgba(71,85,105,0.3)'};padding:0 4px;border-radius:3px;margin-left:5px;white-space:nowrap">${r.avg2<1?r.avg2.toFixed(2):r.avg2<100?r.avg2.toFixed(1):Math.round(r.avg2)}ms</span>`:'';
                         // S6b: event name ellipsis with hover tooltip
                         const _nameDiv=`<div style="max-width:185px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(r.name)}</div>`;
-                        // WAIT_EVENT_CATALOG lookup — full catalog entry for any event with pct2 > 1
-                        const _fullCat=(typeof WAIT_EVENT_CATALOG!=='undefined')?(WAIT_EVENT_CATALOG[r.name]||null):null;
+                        // Full catalog entry via the shared resolver (case-insensitive + variant-tolerant).
+                        const _fullCat=resolveWaitCatalog(r.name);
                         // Prefer WAIT_DIAG_ENGINE Step 1 query (targeted) over generic fixQuery
                         const _diagEng=(typeof WAIT_DIAG_ENGINE!=='undefined')?(WAIT_DIAG_ENGINE[r.name.toLowerCase()]||null):null;
                         const _diagStep1=_diagEng?_diagEng.queries[0]:null;
@@ -33304,17 +34067,17 @@ function renderWaitComparison(ctx) {
                         // Row click toggles the detail panel — accordion + debounce + scroll
                         const _rowClick=_showKB?`onclick="if(this._toggling)return;this._toggling=true;setTimeout(()=>this._toggling=false,300);const r=document.getElementById('${_catRowId}-row');if(!r)return;const opening=r.style.display==='none';document.querySelectorAll('#wait-events-table tr.wait-expanded').forEach(t=>{if(t!==this){t.classList.remove('wait-expanded');const d=t.nextElementSibling;if(d&&d.id&&d.id.startsWith('wcat-'))d.style.display='none'}});if(opening){r.style.display='';this.classList.add('wait-expanded');setTimeout(()=>{const rb=r.getBoundingClientRect();if(rb.bottom>window.innerHeight){r.scrollIntoView({behavior:'smooth',block:'nearest'})}},50)}else{r.style.display='none';this.classList.remove('wait-expanded')}" style="cursor:pointer;user-select:none${isMinor?';display:none':''}${leftBorder?';'+leftBorder:''}"`:`style="${isMinor?'display:none':''}${leftBorder?leftBorder:''}"`;                        // Expand chevron indicator
                         const _chevron=_showKB?`<span class="wait-chevron" style="display:inline-block;font-size:7px;color:#475569;margin-right:5px;transition:transform 0.15s;vertical-align:middle">▶</span>`:'';
-                        return `<tr class="${isMinor?'wait-minor-row':''}" data-pct1="${r.pct1}" data-pct2="${r.pct2}" data-delta="${d}" data-avg1="${r.avg1}" data-avg2="${r.avg2}" data-w2="${r.w2||0}" data-name="${esc(r.name)}" data-wc="${esc((r.wc||'').toLowerCase())}" data-minor="${isMinor?1:0}" ${_rowClick}>
-                            <td class="text-white text-sm font-medium">${_chevron}${_nameDiv}${avgMsPill}${_isRcaLinked?`<span class="hs-drain-flash" title="This wait event is the primary or corroborating signal for the diagnosed root cause — it is directly linked to the RCA bottleneck." style="font-size:0.52rem;padding:1px 6px;border-radius:3px;background:#f43f5e;color:#fff;border:1px solid #fda4af;font-weight:800;letter-spacing:0.04em;margin-left:5px;white-space:nowrap;vertical-align:middle">⚡ RCA LINKED</span>`:''}${!_showKB&&ann?`<div style="color:#94a3b8;font-size:10px;margin-top:2px;line-height:1.4">${ann.tip}</div>`:''}\
+                        return `<tr class="${isMinor?'wait-minor-row':''}" data-pct1="${r.pct1}" data-pct2="${r.pct2}" data-delta="${d}" data-tdelta="${_tDelta}" data-avg1="${r.avg1}" data-avg2="${r.avg2}" data-w2="${r.w2||0}" data-name="${esc(r.name)}" data-wc="${esc((r.wc||'').toLowerCase())}" data-minor="${isMinor?1:0}" ${_rowClick}>
+                            <td class="text-white text-sm font-medium">${_chevron}${_nameDiv}${_isRcaLinked?`<span class="hs-drain-flash" title="This wait event is the primary or corroborating signal for the diagnosed root cause — it is directly linked to the RCA bottleneck." style="font-size:0.52rem;padding:1px 6px;border-radius:3px;background:#f43f5e;color:#fff;border:1px solid #fda4af;font-weight:800;letter-spacing:0.04em;margin-left:5px;white-space:nowrap;vertical-align:middle">⚡ RCA LINKED</span>`:''}${!_showKB&&ann?`<div style="color:#94a3b8;font-size:10px;margin-top:2px;line-height:1.4">${ann.tip}</div>`:''}\
 ${!_showKB&&ann?.fix?`<div style="color:#38bdf8;font-size:9.5px;margin-top:2px">Fix: ${esc(ann.fix)}</div>`:''}\
 ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;margin-top:1px;margin-left:12px">click to expand</div>`:''}</td>
                             <td class="text-xs">${ann?`<span style="color:${(r.wc==='Configuration'||ann.cls==='Configuration')?'#e879f9':'#94a3b8'};font-weight:700">${esc(ann.cls)}</span>`:esc(r.wc)}</td>
                             <td>${_gPct}</td>
                             <td>${_bPct}</td>
                             <td class="${d>5?'text-Cred':d<-5?'text-Cgreen':'text-Cmuted'} font-bold">${d>0?'+':''}${d.toFixed(1)}pp</td>
-                            <td class="font-semibold" style="color:#64748b;opacity:0.7">${r.avg1>0?(+r.avg1).toFixed(1):'—'}</td>
-                            <td class="font-semibold" style="color:${_avg2Col}">${r.avg2>0?(+r.avg2).toFixed(1):'—'}</td>
-                            <td><div style="font-size:9.5px;font-weight:700;color:${(r.w2||0)>0?'#e2e8f0':'#334155'}">${_occBad}</div>${_occBase}</td>
+                            <td class="font-semibold" style="white-space:nowrap"><span style="color:#94a3b8">${_fmtSecs(r.t1)}</span><span style="color:#475569;margin:0 3px">→</span><span style="color:${(r.t2||0)>=(r.t1||0)?'#fca5a5':'#86efac'};font-weight:700">${_fmtSecs(r.t2)}</span><div style="font-size:8px;font-weight:800;color:${_tDelta>0?'#f87171':_tDelta<0?'#4ade80':'#475569'};margin-top:1px">${(()=>{const a=Math.abs(_tDelta);const s=a<1?(a*1000).toFixed(0)+'ms':a<60?a.toFixed(0)+'s':a<3600?(a/60).toFixed(1)+'m':(a/3600).toFixed(1)+'h';return (_tDelta>0?'+'+s+' ↑':_tDelta<0?'−'+s+' ↓':'0');})()}</div></td>
+                            <td class="font-semibold" style="white-space:nowrap"><span style="color:#64748b;opacity:0.85">${r.avg1>0?(+r.avg1).toFixed(r.avg1<100?1:0):'—'}</span><span style="color:#475569;margin:0 3px">→</span><span style="color:${_avg2Col};font-weight:700">${r.avg2>0?(+r.avg2).toFixed(r.avg2<100?1:0):'—'}</span><span style="color:#475569;font-size:8px;margin-left:2px">ms</span></td>
+                            <td style="white-space:nowrap"><span style="color:#94a3b8;font-size:9.5px">${_fmtW5(r.w1)}</span><span style="color:#475569;margin:0 3px">→</span><span style="font-size:9.5px;font-weight:700;color:${(r.w2||0)>=(r.w1||0)?'#fca5a5':'#86efac'}">${_fmtW5(r.w2)}</span></td>
                             <td><span style="font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;background:${assessBg};color:${assessCol};border:1px solid ${assessCol}30${_tip?';cursor:help':''}" title="${esc(_tip)}">${assess}</span>${_sqlCorrHtml}${_sqlLink&&!_drivingSqls.length?`<div style="margin-top:3px"><span onclick="event.stopPropagation();switchTab('sql')" style="cursor:pointer;font-size:8px;color:#818cf8;font-weight:700;text-decoration:underline;text-underline-offset:2px">→ Check SQL Analysis</span></div>`:''}</td>
                         </tr>${_catDetailRow}`;
                     }).join('');
@@ -34007,6 +34770,10 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
             const _internalSymCt = _all.filter(s=>s._isInternalSymptom).length;
             const _topCat = (() => { const c={}; _all.forEach(s=>{c[s._cat]=(c[s._cat]||0)+1}); return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]; })();
             const _bigDelta = _all.find(s=>!s._isCulprit) || _all[0]; // biggest non-culprit delta for stat card
+            // Max-regression segment is "RCA linked" when it is referenced by a problematic
+            // SQL and/or an active wait event (the broad _isLinked signal, or a confirmed
+            // drainer/culprit). When linked, the card is highlighted, badged, and flashed.
+            const _mrLinked = !!(_bigDelta && (_bigDelta._isLinked || _bigDelta._isDrainer || _bigDelta._isCulprit));
             const _catLabels = { concurrency:'Concurrency', io:'I/O Pressure', itl:'ITL Contention', logical_io:'Logical I/O', write_pressure:'Write Pressure', stable_hot:'Stable Hot' };
             const _confCol = {High:{c:'#f43f5e',bg:'rgba(244,63,94,0.12)'},Medium:{c:'#f59e0b',bg:'rgba(245,158,11,0.10)'},Low:{c:'#64748b',bg:'rgba(255,255,255,0.05)'}};
             const _sevCol = {critical:'#f43f5e',high:'#f59e0b',moderate:'#64748b'};
@@ -34025,10 +34792,10 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                         <div style="font-size:1.1rem;font-weight:800;color:#f59e0b">${_topCat?_catLabels[_topCat[0]]||_topCat[0]:'—'}</div>
                         <div style="font-size:0.7rem;color:#475569;margin-top:2px">${_topCat?_topCat[1]+' segments affected':'—'}</div>
                     </div>
-                    <div style="background:rgba(139,92,246,0.05);border:1px solid rgba(139,92,246,0.12);border-radius:8px;padding:12px 14px">
-                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px">Max Regression</div>
-                        <div style="font-size:1.1rem;font-weight:800;color:#a855f7">${_bigDelta?(_bigDelta._maxDelta>=9999?'NEW':('▲'+Math.round(_bigDelta._maxDelta)+'%')):'—'}</div>
-                        <div style="font-size:0.7rem;color:#475569;margin-top:2px">${_bigDelta?esc(_bigDelta.object_name):'—'}</div>
+                    <div class="${_mrLinked?'hs-rca-card-flash':''}" style="background:${_mrLinked?'linear-gradient(135deg,rgba(244,63,94,0.13),rgba(244,63,94,0.04))':'rgba(139,92,246,0.05)'};border:1px solid ${_mrLinked?'rgba(244,63,94,0.40)':'rgba(139,92,246,0.12)'};border-radius:8px;padding:12px 14px">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">Max Regression${_mrLinked?`<span class="hs-drain-flash" title="This segment is directly linked to the diagnosed root cause — referenced by a problematic SQL and/or an active wait event. Remediate here first." style="font-size:0.5rem;padding:1px 5px;border-radius:3px;background:#f43f5e;color:#fff;border:1px solid #fda4af;font-weight:800;letter-spacing:0.04em;white-space:nowrap;vertical-align:middle">⚡ RCA LINKED</span>`:''}</div>
+                        <div style="font-size:1.1rem;font-weight:800;color:${_mrLinked?'#fb7185':'#a855f7'}">${_bigDelta?(_bigDelta._maxDelta>=9999?'NEW':('▲'+Math.round(_bigDelta._maxDelta)+'%')):'—'}</div>
+                        <div style="font-size:0.7rem;color:${_mrLinked?'#fca5a5':'#475569'};margin-top:2px">${_bigDelta?esc(_bigDelta.object_name):'—'}</div>
                     </div>
                     ${_productCt>0?`<div style="background:linear-gradient(135deg,rgba(245,158,11,0.1),rgba(251,191,36,0.04));border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px">
                         <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px"><span style="color:#fbbf24">◆</span> Product Tables</div>
@@ -34142,8 +34909,8 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                     const tags = [_prodBadge, _culpritBadge, _secBadge, _outlierBadge, _baseTags].filter(Boolean).join(' ');
                     const rowId = 'hs-row-'+i;
                     const causeSummary = s._diag.causes.length ? s._diag.causes[0] : '—';
-                    // %total pill for dominant metric
-                    const pctPill = s._maxPct > 5 ? `<span style="font-size:0.58rem;color:${s._maxPct>30?'#f43f5e':s._maxPct>15?'#f59e0b':'#64748b'};margin-left:5px">${Math.round(s._maxPct)}% tot</span>` : '';
+                    // %total pill for dominant metric — rendered on its own line below the values
+                    const pctPill = s._maxPct > 5 ? `<span style="font-size:0.56rem;font-weight:700;color:${s._maxPct>30?'#f43f5e':s._maxPct>15?'#f59e0b':'#64748b'}">${Math.round(s._maxPct)}% of total</span>` : '';
                     // Expandable detail
                     const detailMetrics = s._metrics.map(m => {
                         const _mIsNew = m.d === null;
@@ -34232,11 +34999,14 @@ ${_showKB?`<div class="wait-expand-hint" style="font-size:8.5px;color:#475569;ma
                         </td>
                         <td style="padding:10px 8px"><span style="font-size:0.7rem;padding:2px 8px;border-radius:5px;background:${catCol}12;color:${catCol};border:1px solid ${catCol}25;font-weight:600;white-space:nowrap">${catLabel}</span></td>
                         <td style="padding:10px 8px;white-space:nowrap">${tags}</td>
-                        <td style="padding:10px 8px;text-align:right;white-space:nowrap">
-                            <span style="font-family:monospace;font-size:0.75rem;color:#64748b">${topMetric?_fmt(topMetric.g):'—'}</span>
-                            <span style="color:#334155;margin:0 3px;font-size:0.65rem">→</span>
-                            <span style="font-family:monospace;font-size:0.78rem;color:#f1f5f9;font-weight:700">${topMetric?_fmt(topMetric.b):'—'}</span>
-                            ${pctPill}
+                        <td style="padding:10px 8px;text-align:right;white-space:nowrap;vertical-align:middle">
+                            ${topMetric?`<div style="font-size:0.56rem;color:#64748b;font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:0.03em">${esc(topMetric.label)}</div>`:''}
+                            <div style="display:inline-flex;align-items:center;justify-content:flex-end;gap:6px">
+                                <span style="font-family:monospace;font-size:0.74rem;color:#64748b;min-width:48px;text-align:right">${topMetric?_fmt(topMetric.g):'—'}</span>
+                                <span style="color:#334155;font-size:0.7rem">→</span>
+                                <span style="font-family:monospace;font-size:0.82rem;color:#f1f5f9;font-weight:700;min-width:56px;text-align:right">${topMetric?_fmt(topMetric.b):'—'}</span>
+                            </div>
+                            ${pctPill?`<div style="margin-top:2px">${pctPill}</div>`:''}
                         </td>
                         <td style="padding:10px 8px;width:80px">${_isNew
                             ? `<span style="font-size:0.65rem;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);font-weight:800;letter-spacing:0.03em">NEW</span>`
@@ -35209,7 +35979,7 @@ function _sortWaitTable(key) {
     });
     // Update header sort indicators
     document.querySelectorAll('#wait-events-table thead th span').forEach(s => s.style.opacity = '0.4');
-    const colMap = {name:0, pct1:2, pct2:3, delta:4, delta_asc:4, avg1:5, avg2:6, w2:7, max_pct:3};
+    const colMap = {name:0, pct1:2, pct2:3, delta:4, delta_asc:4, tdelta:5, avg1:6, avg2:6, w2:7, max_pct:3};
     const colIdx = colMap[key];
     if (colIdx !== undefined) {
         const ths = document.querySelectorAll('#wait-events-table thead th');

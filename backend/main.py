@@ -34,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from routers import snapshots, compare, sql_analysis, wait_events, upload, recommendations, intelligence, rag, ai_rca
+from routers import snapshots, compare, sql_analysis, wait_events, upload, recommendations, intelligence, rag, ai_rca, memory, kb
 from services.data_source import resolve_period_or_404
 
 log = logging.getLogger(__name__)
@@ -116,6 +116,8 @@ app.include_router(recommendations.router)
 app.include_router(intelligence.router)
 app.include_router(rag.router)
 app.include_router(ai_rca.router)
+app.include_router(memory.router)
+app.include_router(kb.router)
 
 
 # ─── Favicon (suppress 404 noise) ───────────────────────────────────────────
