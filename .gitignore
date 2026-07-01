@@ -41,6 +41,10 @@ outlook_drop/
 knowledge_base.jsonl
 kb_markdown/
 
+# Raw PDF text extracts (intermediate artifact, not used by any code — the
+# ingested/searchable knowledge lives in backend/data/rag_kb.db instead)
+backend/data/pdf_extracts/
+
 # Zip outputs
 *.zip
 

@@ -582,7 +582,7 @@ def format_chunks_for_prompt(chunks: list[dict], max_chars: int = 2500) -> str:
     """
     if not chunks:
         return ""
-    lines: list[str] = ["## Oracle SQL Tuning Guide — Relevant Sections\n"]
+    lines: list[str] = ["## Oracle Documentation — Relevant Sections\n"]
     used = len(lines[0])
     for i, chunk in enumerate(chunks, start=1):
         header = f"[{i}] {chunk['source_file']} p.{chunk['page_num']} — {chunk['section']}\n"

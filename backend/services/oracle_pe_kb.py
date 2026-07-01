@@ -121,6 +121,18 @@ Causes for direct path read TEMP specifically:
   → Check V$PGASTAT.over_allocation_count > 0 = PGA_AGGREGATE_TARGET too small.
   → V$PGASTAT.global_memory_bound < 1 MB = critical PGA pressure.
   → Use V$PGA_TARGET_ADVICE to find optimal PGA_AGGREGATE_TARGET size.
+  → Rule of thumb: V$PGASTAT "cache hit percentage" (= bytes_processed*100/(bytes_processed+
+    extra_bytes_read_written)) should be >60%. At exactly 60% the instance is already re-reading/
+    re-writing almost as much extra data as it needed to process once — a strong quantified signal,
+    not just "some spilling occurred". Below 60% = clearly under-sized PGA, not borderline.
+  → NAME THE CULPRIT (do not just say "increase PGA_AGGREGATE_TARGET" generically): join
+    V$SQL_WORKAREA to V$SQL (on ADDRESS/HASH_VALUE) to find the exact SQL_ID/cursor whose work
+    area has nonzero ONEPASS_EXECUTIONS/MULTIPASSES_EXECUTIONS, then join V$SQL_PLAN to identify
+    which operator (HASH JOIN, SORT, BITMAP MERGE, etc.) is the one spilling. V$SQL_WORKAREA_HISTOGRAM
+    additionally buckets executions by work-area size class (LOW_OPTIMAL_SIZE/HIGH_OPTIMAL_SIZE) so a
+    verdict can state e.g. "16-32MB work areas: 103 one-pass executions, 0 optimal" instead of a single
+    aggregate number — this is the difference between "PGA is generally tight" and "this specific
+    hash-join in SQL_ID abc123 is the one spilling."
 Action: increase PGA_AGGREGATE_TARGET if sorts_to_disk dominate; reduce DOP if not needed.
 
 === direct path write / direct path write temp ===
@@ -283,6 +295,14 @@ ORACLE MEMORY TUNING RULES (official guide):
   Use: ALTER TABLE x STORAGE (BUFFER_POOL KEEP).
 • RECYCLE pool: for large segments accessed infrequently (full scans on large tables).
 • DB_WRITER_PROCESSES: at minimum 1 per 8 CPUs; scale up if free_buffer_waits persist.
+• Force Full Database Caching Mode (12.1.0.2+, `ALTER DATABASE FORCE FULL DATABASE CACHING`,
+  verify via `V$DATABASE.FORCE_FULL_DB_CACHING`): when the buffer cache is larger than the whole
+  database, this forces every block (including NOCACHE LOBs) to be cached rather than relying on
+  the default heuristic (small tables always cached, medium tables cached based on reuse interval,
+  large tables normally NOT cached unless in the KEEP pool). If this is enabled and physical reads
+  are still high, do not blame default-caching-mode heuristics — the DB is caching everything it can
+  already; the real cause is elsewhere (buffer cache genuinely too small relative to DB size, or
+  direct-path reads that bypass the buffer cache entirely regardless of this setting).
 
 === Shared Pool / Library Cache ===
 • Library cache hit ratio = (pins - reloads) / pins. Target >99%.
@@ -306,11 +326,24 @@ ORACLE MEMORY TUNING RULES (official guide):
   - global_memory_bound < 1 MB → critical PGA pressure; must increase target.
   - extra_bytes_read_written / total_bytes_processed → pass ratio (high = sorts spilling to disk).
   - cache_hit_percentage < 80% → PGA too small, sort work spilling excessively.
+    (Oracle's own documented rule of thumb is >60% as the minimum acceptable floor — at exactly 60%
+    the instance is re-processing almost double the bytes it should need to, via extra one-pass/
+    multi-pass passes over spilled data. Treat anything below 60% as unambiguously undersized, and
+    80%+ as the target for a healthy DSS/batch workload rather than the pass/fail line.)
 • V$PGA_TARGET_ADVICE: find estd_extra_bytes_rw_factor at size_factor=2. 
   If factor < 0.5 at 2x size → strong recommendation to double PGA_AGGREGATE_TARGET.
 • direct path read temp wait + low PGA cache hit = PGA pressure.
 • V$TEMPSEG_USAGE: find SQL causing sorts to disk (identify candidates for SQL tuning first).
-• PGA_AGGREGATE_LIMIT: hard ceiling; if processes exceed it they are terminated (emergency only).
+• V$SQL_WORKAREA (joined to V$SQL/V$SQL_PLAN) names the exact SQL_ID and operator (HASH JOIN, SORT,
+  BITMAP MERGE, etc.) responsible for one-pass/multi-pass executions — use this instead of a generic
+  "increase PGA_AGGREGATE_TARGET" recommendation whenever a specific offending cursor can be named.
+  V$SQL_WORKAREA_HISTOGRAM buckets by work-area size class for a more precise "which size range is
+  spilling" statement than a single aggregate percentage.
+• PGA_AGGREGATE_LIMIT: hard ceiling — Oracle first ABORTS calls, then TERMINATES sessions/processes
+  consuming the most untunable PGA memory if still over limit (parallel query counted as one unit;
+  terminated sessions raise ORA-10260). Default = greatest of 2GB / 200% of PGA_AGGREGATE_TARGET /
+  3MB×PROCESSES, capped at 120% of (physical memory − total SGA). Can also be enforced per consumer
+  group via DBMS_RESOURCE_MANAGER.CREATE_PLAN_DIRECTIVE's SESSION_PGA_LIMIT (same ORA-10260 on breach).
 • Default PGA_AGGREGATE_TARGET = 20% of SGA. For sort-heavy DSS: may need 40-60% of RAM.
 
 === SGA Sizing ===
@@ -649,6 +682,28 @@ Without system stats: optimizer uses defaults which may not reflect actual stora
 • Column ordering in composite index: most selective column first (unless leading column needed).
 • Skip scan: optimizer can skip leading column IF leading column has few distinct values (rare).
 • Index skip scan shows as INDEX SKIP SCAN in plan — usually not optimal; add dedicated index.
+
+=== B-TREE INDEXES AND NULLS (critical, easy to miss) ===
+B-tree indexes NEVER store a row whose indexed key is completely NULL.
+  • Single-column index on a nullable column → rows with NULL in that column are NOT in the index.
+  • Composite index → only excluded if ALL indexed columns are NULL for that row.
+Why this matters for access path selection:
+  • SELECT COUNT(*) FROM t (no predicate) CANNOT use an index on a nullable column — the index
+    does not guarantee every row is represented, so the optimizer is forced to FULL TABLE SCAN.
+  • WHERE nullable_col IS NOT NULL → CAN use the index (all matching rows are guaranteed indexed).
+  • WHERE nullable_col IS NULL → CANNOT use a plain B-tree index (nulls aren't stored) — full scan.
+Field pattern: DBA sees FTS on a table with a seemingly-selective indexed column and assumes
+  "missing index" — but the real cause is the column is nullable and the query has no predicate
+  (e.g. SELECT department_id FROM employees with no WHERE clause forces FTS even with an index
+  present, because NULL department_id rows would be silently excluded by the index).
+Fix: NOT NULL constraint (if valid) restores full index eligibility, or add an IS NOT NULL predicate.
+
+=== INDEX JOIN SCAN (avoids table access entirely) ===
+When a query needs ONLY columns that, combined, are covered by two or more indexes on the same
+table, the optimizer can hash-join the indexes together and skip the table completely.
+Plan shows: VIEW index$_join$_NNN over a HASH JOIN of two INDEX RANGE/FAST FULL SCAN steps.
+When the optimizer avoids it: table access is often actually cheaper than joining multiple indexes;
+an index join is usually only chosen when it is forced (INDEX_JOIN hint) or clearly cheapest.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -706,6 +761,60 @@ Fix: add missing WHERE clause join condition.
   Fix: USE_HASH hint; check cardinality estimates (stale stats?).
 • PLAN_REGRESSION + join method changed (NL→HASH or HASH→NL) → statistics change caused it.
   Fix: gather stats on tables involved; pin old plan via SPM if needed immediately.
+
+=== SEMIJOINS AND ANTIJOINS (EXISTS / IN / NOT EXISTS / NOT IN) ===
+These are NOT separate join methods — they are an optimization applied to nested loops, hash,
+or sort-merge joins when a subquery only needs to test for a MATCH, not return every match.
+• Semijoin (EXISTS / IN subquery): stops probing the inner/subquery row source at the FIRST
+  match — never duplicates the outer row even if multiple inner rows match.
+  Plan shows: NESTED LOOPS SEMI, HASH JOIN SEMI, MERGE JOIN SEMI.
+• Antijoin (NOT EXISTS / NOT IN subquery): returns the outer row only when NO match is found.
+  Plan shows: NESTED LOOPS ANTI, HASH JOIN ANTI, MERGE JOIN ANTI.
+
+*** CRITICAL PRODUCTION BUG PATTERN — NOT IN vs nullable subquery column ***
+WHERE col NOT IN (SELECT nullable_col FROM t) returns ZERO ROWS if even ONE row in the
+subquery has nullable_col = NULL. This is because Oracle expands NOT IN into a chain of
+  col != v1 AND col != v2 AND col != NULL — and any comparison to NULL is UNKNOWN, not TRUE,
+  so the whole AND chain can never evaluate to TRUE.
+This is a semantic/correctness bug, not just a performance issue — always check application
+  reports of "query returns no rows unexpectedly" against this pattern first.
+Detect in the plan: NESTED LOOPS ANTI SNA ("single null-aware antijoin") or ANTI NA
+  ("null-aware antijoin") — pre-11g Oracle could not even use antijoin at all with a nullable
+  subquery column and would silently fall back to a much slower filter-based plan; 11g+ can
+  optimize it correctly IF the null-aware variant is used, but the RESULT is still empty unless fixed.
+Fix (in priority order): (1) add IS NOT NULL to the subquery, (2) wrap the subquery column in
+  NVL(), (3) add a NOT NULL constraint at the source, or (4) rewrite as NOT EXISTS (NOT EXISTS
+  ignores nulls correctly and does not have this trap — prefer NOT EXISTS over NOT IN generally).
+
+=== PARTITION-WISE JOINS (large partitioned tables / DW / batch) ===
+When at least one joined table is partitioned on the join key, Oracle can split one large join
+into many small joins between matching partition pairs instead of moving all rows through a
+single join operation — dramatically reducing data movement and PGA/TEMP pressure.
+• FULL partition-wise join: BOTH tables equipartitioned on the join key (or related by reference
+  partitioning). Plan shows a partition iterator (PX PARTITION HASH ALL / RANGE ALL) directly
+  above the join. Can run serially or parallel.
+• PARTIAL partition-wise join: only ONE table is partitioned on the join key; the other is
+  dynamically repartitioned in flight. REQUIRES parallel execution. Plan shows
+  PX SEND PARTITION (KEY).
+Why it matters for RAC: partition-wise joins avoid shipping large row sets across the
+  interconnect — a key lever if 'gc cr/current' cluster wait events are elevated alongside a
+  large join on partitioned fact tables.
+AWR signal: large HASH JOIN or MERGE JOIN on partitioned tables with NO partition iterator
+  above it in the plan (or the wrong partition key used) → missed partition-wise join
+  opportunity; check that both sides share equivalent partitioning on the join column.
+
+=== BLOOM FILTERS (parallel query / star schema join filtering) ===
+A Bloom filter is a small in-memory probabilistic membership test built from one side of a join
+(usually the small dimension table) and pushed down to filter rows from the other side (the large
+fact table) BEFORE they are sent across parallel server processes or to the join itself.
+• Guarantees no false negatives (never wrongly discards a matching row) but may pass through a
+  small number of false positives (harmless — final join step re-checks them).
+• Plan shows: JOIN FILTER CREATE :BF0000 on the build side, JOIN FILTER USE :BF0000 on the
+  probe side, and a filter predicate SYS_OP_BLOOM_FILTER(:BF0000, ...) on the scan of the large table.
+Why it matters: this is one of the biggest parallel-query and Exadata star-schema performance
+  levers — it prevents shipping fact-table rows across the interconnect/parallel servers that
+  would be discarded by the join anyway. If a large parallel join on a star schema shows NO
+  Bloom filter in the plan, that is worth investigating (check PX_JOIN_FILTER is not disabled).
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1029,6 +1138,399 @@ Workaround: use Latch Miss Sources + SQL Ordered by Gets to infer the hot SQL.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DYNAMIC PERFORMANCE VIEWS GUIDE (Oracle DB Performance Tuning Guide 19c Ch.10
+# "Instance Tuning Using Performance Views" §10.1.2.2/10.1.3.3/10.3.11, §10.4)
+# ─────────────────────────────────────────────────────────────────────────────
+DIAGNOSTIC_VIEWS_GUIDE = """
+DATA DICTIONARY / DYNAMIC PERFORMANCE (V$) VIEWS — DIAGNOSTIC REFERENCE:
+
+=== I/O STATISTICS BY FUNCTION — V$IOSTAT_FUNCTION ===
+Classifies ALL database I/O by the Oracle component/process that issued it, not just by
+file or event. Query the classification hierarchy directly:
+  SELECT FUNCTION_ID, FUNCTION_NAME FROM V$IOSTAT_FUNCTION ORDER BY FUNCTION_ID;
+Buckets (lower FUNCTION_ID wins on conflict, e.g. an XDB I/O from the buffer cache is
+  classified as XDB, not "Buffer Cache Reads"):
+  0 RMAN | 1 DBWR | 2 LGWR | 3 ARCH | 4 XDB | 5 Streams AQ | 6 Data Pump | 7 Recovery |
+  8 Buffer Cache Reads | 9 Direct Reads | 10 Direct Writes | 11 Others
+Diagnostic value: when total I/O is elevated but SQL-level diagnostics (SQL by Reads) don't
+  explain it, check V$IOSTAT_FUNCTION — RMAN backup, Data Pump export, or Streams AQ can be
+  contending for the same storage without appearing in any SQL-ordered AWR section at all.
+
+=== V$IOSTAT_FILE — Per-Datafile Latency (Storage Responsiveness) ===
+SMALL_SYNC_READ_LATENCY column = latency (ms) for single-block synchronous reads per file —
+  this is what a client actually waits for, distinct from an averaged instance-wide wait event.
+Requires TIMED_STATISTICS=TRUE. If a specific critical datafile shows elevated
+  SMALL_SYNC_READ_LATENCY vs its siblings, that file's underlying storage path is the bottleneck
+  (not "storage in general") — relocate that datafile specifically rather than resizing caches.
+
+=== V$IOSTAT_CONSUMER_GROUP / V$IOSTAT_NETWORK — Resource Manager & Remote I/O ===
+V$IOSTAT_CONSUMER_GROUP: I/O broken down by Resource Manager consumer group (only populated
+  if Database Resource Manager plan is active) — use to prove/disprove a specific consumer
+  group is monopolizing I/O before recommending a resource plan change.
+V$IOSTAT_NETWORK: network I/O caused by REMOTE access (dblinks, RMAN over network) — client,
+  read/write op counts, KB transferred, total wait ms. Distinct from SQL*Net client wait events;
+  this is inter-database traffic, relevant when a query touching a dblink is unexpectedly slow.
+
+=== HOT BLOCK IDENTIFICATION — V$LATCH_CHILDREN + X$BH.TCH (concrete technique) ===
+When `latch: cache buffers chains` dominates, go one level deeper than "which SQL has high
+buffer gets" — identify the EXACT hot block:
+  1. Find the contended CBC child latch (highest GETS/MISSES/SLEEPS vs siblings):
+     SELECT ADDR, GETS, MISSES, SLEEPS FROM V$LATCH_CHILDREN
+     WHERE NAME = 'cache buffers chains' ORDER BY SLEEPS DESC;
+  2. Join that latch address to X$BH (buffer headers) to find the actual blocks it protects:
+     SELECT OBJ data_object_id, FILE#, DBABLK, CLASS, STATE, TCH
+     FROM X$BH WHERE HLADDR = '<address from step 1>' ORDER BY TCH DESC;
+     TCH = touch count; a consistently high TCH value across repeated samples = the hot block.
+  3. Resolve the object name from the object id:
+     SELECT OBJECT_NAME, SUBOBJECT_NAME FROM DBA_OBJECTS WHERE DATA_OBJECT_ID = &obj;
+This gives a named table/index for the RCA narrative instead of a generic "CBC latch contention"
+  statement — critical for the "Object Naming Rule" already enforced in this dashboard's verdicts.
+
+=== INSTANCE/CRASH RECOVERY TUNING — FAST_START_MTTR_TARGET (distinct topic — checkpoint tuning) ===
+Not a wait-event or SQL-tuning topic — this governs how fast the instance recovers after a
+crash, and trades off against steady-state DML performance:
+  • FAST_START_MTTR_TARGET (seconds): target Mean Time To Recover. Database self-tunes
+    incremental checkpoint writes (DBWn writes oldest-dirty-first) to try to meet this target.
+  • Lower target → more frequent checkpoint writes → faster recovery but MORE DBWR I/O overhead
+    during normal operation (can worsen `free buffer waits` / redo-related waits under heavy DML).
+  • Higher target (max 3600s) → less checkpoint I/O overhead, but longer recovery time after a crash.
+  • V$INSTANCE_RECOVERY.TARGET_MTTR = effective (achievable) MTTR; .ESTIMATED_MTTR = current
+    live estimate based on dirty buffer/redo volume right now. Compare the two: if TARGET_MTTR
+    is consistently far below ESTIMATED_MTTR, checkpointing is not keeping pace with DML volume.
+  • V$INSTANCE_RECOVERY.OPTIMAL_LOGFILE_SIZE (MB): if your online redo logs are consistently
+    smaller than this value, Oracle adds extra checkpoint overhead — resize all redo logs to
+    at least this value (all members must be the same size).
+  • V$MTTR_TARGET_ADVICE: MTTR Advisor simulates up to 4 alternate FAST_START_MTTR_TARGET
+    values against the current workload and reports relative cache-write/I/O overhead ratios —
+    use before changing the parameter, not just by guessing a "safe" number.
+Diagnostic trigger: if `free buffer waits`, `log file switch (checkpoint incomplete)`, or DBWR
+  write-volume spikes correlate with a recent DECREASE in FAST_START_MTTR_TARGET (more
+  aggressive recovery target), the checkpoint tuning tradeoff — not undersized memory — is
+  the likely cause. Do not recommend buffer cache resize without first checking this parameter.
+
+=== DYNAMIC PERFORMANCE VIEW CATALOG FOR WAIT-EVENT DRILL-DOWN (which view answers which question) ===
+  V$ACTIVE_SESSION_HISTORY   — 1-second sampled active session snapshots (last ~1hr in SGA)
+  V$SESS_TIME_MODEL / V$SYS_TIME_MODEL — DB time breakdown per session / instance-wide
+  V$SESSION_WAIT             — CURRENT/last wait per session, with P1/P2/P3 detail columns
+  V$SESSION_WAIT_HISTORY     — last 10 completed waits per active session (short local history)
+  V$SESSION_EVENT            — cumulative per-session wait totals (cleared when session exits)
+  V$SYSTEM_EVENT             — cumulative INSTANCE-WIDE wait totals since startup (AWR source)
+  V$EVENT_HISTOGRAM          — distribution of wait durations per event (spot bimodal waits —
+                                e.g. mostly fast + a long tail — that a simple average would hide)
+  V$FILE_HISTOGRAM / V$TEMP_HISTOGRAM — same histogram concept, scoped to a specific data/temp file
+  V$SESSION_WAIT_CLASS / V$SYSTEM_WAIT_CLASS — waits pre-aggregated by wait CLASS (I/O, Concurrency,
+                                Commit, etc.) rather than by individual event name
+Use histograms (V$EVENT_HISTOGRAM etc.) specifically when an event's AVERAGE wait looks
+  acceptable but users still report intermittent slowness — the average can hide a long tail of
+  a small number of very slow waits mixed with many fast ones; the histogram exposes that shape.
+
+=== BIND-VARIABLE / LITERAL-SQL DETECTION QUERIES (V$SQLSTATS) ===
+Beyond the hard-parse-rate threshold already used for HARD_PARSE_STORM, these queries name
+the actual offending statements:
+  -- Statements with very few executions (candidates for literal-instead-of-bind-variable):
+  SELECT SQL_TEXT FROM V$SQLSTATS WHERE EXECUTIONS < 4 ORDER BY SQL_TEXT;
+  -- Group near-duplicate statements by their first 60 bytes (literals differ only after this):
+  SELECT SUBSTR(SQL_TEXT,1,60), COUNT(*) FROM V$SQLSTATS WHERE EXECUTIONS < 4
+  GROUP BY SUBSTR(SQL_TEXT,1,60) HAVING COUNT(*) > 1;
+  -- Distinct SQL sharing one execution plan 4+ times = same query shape, different literals:
+  SELECT SQL_TEXT FROM V$SQLSTATS WHERE PLAN_HASH_VALUE IN
+    (SELECT PLAN_HASH_VALUE FROM V$SQLSTATS GROUP BY PLAN_HASH_VALUE HAVING COUNT(*) > 4);
+PARSE_CALLS ≈ EXECUTIONS for a given SQL_ID = that statement is being reparsed on every call
+  (cursor not being cached/reused) even though it may already use bind variables correctly —
+  a distinct problem from literal SQL, fixed by session cursor cache sizing, not bind variables.
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADDM METHODOLOGY & AWR COMPARE PERIODS INTERPRETATION
+# (Oracle "Get Started with Performance Tuning" 26ai guide — ADDM finding model,
+#  AWR Compare Periods commonality/change-impact metrics, ASH activity-over-time
+#  skew analysis, application-scoped AWR)
+# ─────────────────────────────────────────────────────────────────────────────
+ADDM_METHODOLOGY_GUIDE = """
+ADDM FINDING MODEL AND AWR COMPARE PERIODS METRICS — INTERPRETATION GUIDE:
+
+=== ADDM FINDING TAXONOMY: PROBLEM vs SYMPTOM vs INFORMATION vs WARNING ===
+Every ADDM finding belongs to exactly one of FOUR categories, and mixing them up leads to
+wrong prioritization in an RCA narrative:
+  • PROBLEM finding — names an actual root cause of a performance issue. Always carries a
+    quantified impact (estimated % of DB Time attributable to it).
+  • SYMPTOM finding — reports something that is downstream evidence pointing toward one or
+    more PROBLEM findings, but is not itself the cause. Symptom findings exist to justify why
+    a problem finding was raised, not to be independently remediated.
+  • INFORMATION finding — an area explicitly confirmed to have NO performance impact. Its
+    purpose is to record that ADDM considered it and ruled it out, preventing wasted
+    re-investigation of the same area later.
+  • WARNING finding — flags a problem with the ANALYSIS ITSELF, not with the database. It
+    means something (e.g. missing/gapped AWR data for part of the analysis window, an
+    instance that went down mid-period) may have degraded the completeness or accuracy of
+    the ADDM run. Treat a WARNING finding as a caveat that lowers confidence in the other
+    findings from the same analysis period — never as a database performance problem to
+    remediate, and never silently drop it from the narrative; disclose it so the confidence
+    tier reflects reduced analysis completeness.
+Rule for RCA narrative construction: lead with PROBLEM findings ranked by impact %, cite
+SYMPTOM findings only as supporting evidence for a problem, surface WARNING findings as an
+explicit caveat affecting confidence, and never present an INFORMATION finding as if it were
+actionable.
+
+=== REAL-TIME ADDM — AUTOMATIC TRIGGER THRESHOLDS FOR TRANSIENT/HANG DETECTION ===
+Separately from the hourly snapshot-driven ADDM analysis, MMON evaluates lightweight
+in-memory statistics every 3 seconds and automatically triggers a Real-Time ADDM analysis
+(stored via DBA_HIST_REPORTS) the instant any of these documented conditions is crossed:
+  • High load        — average active sessions (AAS) > 3x the number of CPU cores.
+  • CPU bound         — AAS > 10% of total load AND CPU utilization > 50%.
+  • I/O bound         — single-block read performance-based I/O impact on active sessions.
+  • Interconnect bound— based on single-block interconnect (RAC) transfer time.
+  • Over-allocated memory — memory allocations exceed 95% of physical memory.
+  • Session limit / Process limit — either limit is close to 100% of its configured maximum.
+  • Hung session      — hung sessions exceed 10% of total sessions.
+  • Deadlock detected — any deadlock is detected.
+Repeated-trigger suppression: once a trigger fires, the SAME issue will not re-trigger within
+45 minutes unless its impact has grown by 100% or more over the previous report (e.g. an
+active-session impact of 8 must reach 16+ to re-trigger) — so a Real-Time ADDM report that
+recurs on a ~45-minute cadence at a STABLE impact size indicates a persistent, non-worsening
+condition, whereas an early re-trigger indicates the condition is actively escalating. Use
+this distinction when characterizing severity trend (worsening vs. steady-state) from
+repeated Real-Time ADDM evidence in an AWR-based RCA — a persistent low-grade hang signal is
+a different verdict than a rapidly escalating one even if both show "high load".
+
+=== FINDINGS CAN LEGITIMATELY OVERLAP PAST 100% OF DB TIME ===
+Because a single root cause can be described from multiple analytical angles, the impact
+percentages of separate ADDM findings are NOT mutually exclusive and do not have to sum to
+100%. Example: a poorly-tuned SQL statement causing heavy I/O might be reported both as a
+"high-load SQL" finding (e.g. 50% of DB Time) AND as an "undersized buffer cache" finding
+(e.g. 75% of DB Time) — the same underlying activity is being counted from two perspectives.
+Do NOT treat the sum of finding percentages as a budget that must total 100%; do not flag an
+apparent "overlap" as a data inconsistency in generated reports.
+
+=== RECOMMENDATION BENEFIT % CAN ALSO EXCEED THE FINDING'S OWN IMPACT % ===
+When a single finding has multiple recommendations, they are frequently ALTERNATIVES to
+each other (different ways to solve the same problem), not a checklist to be applied together.
+The sum of their benefit percentages can therefore exceed the finding's own impact, and
+implementing every recommendation is neither expected nor always beneficial — pick the
+recommendation with the best expected/effort tradeoff, not all of them.
+
+=== DBIO_EXPECTED — THE HIDDEN ASSUMPTION BEHIND ADDM'S I/O VERDICTS ===
+ADDM's cost model for I/O-related findings depends on one calibration input: DBIO_EXPECTED,
+the assumed average single-block read time in microseconds (default 10,000us = 10ms, tuned
+for spinning-disk-era hardware). If the real storage tier is faster (SSD/NVMe/Exadata Smart
+Flash) and DBIO_EXPECTED was never recalibrated, ADDM's I/O-related findings will be
+systematically overstated — it will flag I/O as a bottleneck using a stale expectation baseline.
+Diagnostic implication: before trusting an ADDM/AWR "I/O bottleneck" finding at face value,
+check whether DBIO_EXPECTED has been calibrated for the actual storage
+(DBMS_ADVISOR.SET_DEFAULT_TASK_PARAMETER('ADDM','DBIO_EXPECTED', <measured_value>)). An
+uncalibrated default on modern flash storage is one of the most common sources of ADDM
+falsely over-blaming I/O when the real average single-block read latency is far below 10ms.
+
+=== AWR COMPARE PERIODS — "COMMONALITY" METRIC (workload comparability check) ===
+Before trusting a Compare Periods report's conclusions, check the commonality percentage —
+the proportion of resource consumption attributable to SQL statements that appear in BOTH
+compared periods. Commonality near 100% means the same workload signature ran in both
+periods, so differences in wait events/load profile can be attributed to a genuine performance
+change. Low commonality means the two periods ran substantially DIFFERENT workloads (e.g.
+different batch jobs, different day-of-week mix) — in that case, apparent performance
+"regressions" may simply reflect comparing apples to oranges, not a true regression, and the
+report's other findings should be treated with reduced confidence until re-run against a more
+comparable base period.
+
+=== AWR COMPARE PERIODS — "CHANGE IMPACT" SIGN CONVENTION (do not misread the sign) ===
+The Change Impact value attached to a Compare Period ADDM finding expresses the relative
+change in DB Time consumed by that issue between the base and comparison periods:
+  • POSITIVE Change Impact = improvement (the comparison period is BETTER than the base).
+  • NEGATIVE Change Impact = regression (the comparison period is WORSE than the base).
+Magnitude interpretation is non-linear versus intuition: a Change Impact of −200% means the
+comparison period is roughly 3× SLOWER than the base period for that issue (not simply "200%
+worse" in a naive additive sense) — treat large negative percentages as multiplicative slowdown
+factors, not literal percentage overhead, when writing the narrative for the user.
+
+=== ACTIVITY OVER TIME — SKEW ANALYSIS (ASH report time-slot table) ===
+When an ASH report's "Activity Over Time" table is available, it splits the analysis window into
+roughly-equal inner time slots (plus two odd-sized outer slots at the very start/end). Two
+independent columns can spike, and they mean different things:
+  • Slot Count spike = a genuine RISE in active session volume during that slot — the workload
+    itself intensified.
+  • Event Count spike (for a specific wait event) = a rise in how many of the active sessions in
+    that slot were waiting specifically on that event — contention concentrated, even if overall
+    session volume didn't change much.
+A slot where BOTH spike together is strong, corroborated evidence that the slot is the true
+origin of a transient problem; a slot where only Event Count spikes (Slot Count flat) points to a
+contention-only episode (lock/latch storm) rather than a general load increase — these call for
+different remediation (concurrency fix vs capacity fix) and should not be narrated identically.
+
+=== APPLICATION-SCOPED AWR (23ai/26ai feature — DBMS_AWRAPP) ===
+Newer Oracle releases can scope AWR snapshot capture to a specific application (identified by
+MODULE/ACTION/CLIENT_INFO/CLIENT_IDENTIFIER pattern matching via an "APPMAP"), independent
+of the whole-instance AWR snapshot. This solves a real blind spot: a SQL statement that is
+extremely important to one application but not globally in the instance-wide Top-N by resource
+consumption never surfaces in a standard AWR report at all. If application-level AWR data is
+present (DBA_AWRAPP_INFO / DBA_AWRAPP_SQLSTAT / AWR_PDB_AWRAPP_SQLSTAT), treat it as a
+narrower, more precise lens for that application's SQL — do not assume the instance-wide
+AWR Top SQL sections are exhaustive for every individual application sharing the database.
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA DICTIONARY & CDB/PDB VIEW ARCHITECTURE
+# (Oracle Database Concepts 23ai, Ch.9 "Data Dictionary and Dynamic Performance Views")
+# ─────────────────────────────────────────────────────────────────────────────
+DATA_DICTIONARY_ARCHITECTURE_GUIDE = """
+DATA DICTIONARY / CDB-PDB VIEW PREFIX ARCHITECTURE — QUERY-CORRECTNESS REFERENCE:
+
+=== VIEW PREFIX SEMANTICS: DBA_ / ALL_ / USER_ / CDB_ (pick the wrong one, get wrong data) ===
+  DBA_*  — every object in the CURRENT container only (whole PDB, or whole non-CDB database).
+  ALL_*  — objects the CURRENT USER can see (owned + granted access), obeys currently enabled
+           roles — same query can return different row counts depending on SET ROLE state.
+  USER_* — objects owned by the current user only; OWNER column is implied/omitted.
+  CDB_*  — every object across the ENTIRE CDB (root + all PDBs) in one query, adds a CON_ID
+           column. Exists as a 1:1 counterpart to almost every DBA_ view.
+Practical rule for this dashboard: when a target database is a multitenant CDB, a DBA_HIST_*
+  or DBA_* diagnostic query issued while connected to the CDB root only sees CDB-root-local
+  rows, NOT the PDB where the actual workload runs — if AWR/ASH data looks unexpectedly empty
+  or incomplete, check whether the connection is at the CDB root vs the correct PDB before
+  concluding the workload has no activity. Querying CDB_* from the root (e.g. CDB_HIST_ACTIVE_SESS_HISTORY
+  if available) or connecting directly to the PDB are the two ways to get complete data.
+
+=== CON_ID — CONTAINER ID COLUMN ON CDB_ / V$ VIEWS ===
+  CON_ID = 0  → row pertains to the WHOLE CDB (aggregate)
+  CON_ID = 1  → row pertains to CDB$ROOT only
+  CON_ID = 2  → row pertains to PDB$SEED (template PDB, not a real workload)
+  CON_ID > 2  → row pertains to a specific user-created PDB or application root/seed
+When cross-checking AWR/ASH evidence against CDB_ or V$ views in a multitenant target, ALWAYS
+  filter or group by CON_ID — mixing CON_ID=1 (root) rows with the real workload's PDB rows in
+  the same aggregate silently understates or distorts the metric being diagnosed.
+
+=== V$ vs GV$ — SINGLE INSTANCE vs RAC-WIDE ===
+Every V$ view has a GV$ counterpart (adds an INST_ID column) that unions the same view across
+  ALL instances of an Oracle RAC cluster. A diagnostic query written against V$ on a RAC system
+  only reflects the instance the session happens to be connected to — if RCA evidence looks
+  inconsistent between runs or misses an obviously loaded node, confirm whether the target
+  cluster is RAC and whether GV$ (not V$) should have been used to see the whole cluster.
+
+=== SELF-DISCOVERY: DICTIONARY VIEW + V$FIXED_TABLE ===
+  SELECT * FROM DICTIONARY ORDER BY TABLE_NAME;      -- every data dictionary view + description
+  SELECT * FROM V$FIXED_TABLE;                        -- every dynamic performance (V$/X$) view
+Use these when a diagnostic hypothesis needs a view whose exact name isn't already in this KB —
+  faster and more reliable than guessing a plausible-sounding view name.
+
+=== WHY THIS MATTERS FOR THIS DASHBOARD ===
+comparator.py's incident checks and the AWR-Compare-Periods logic assume single-container,
+single-instance semantics (querying DBA_HIST_* / V$ style views directly). None of the current
+checks filter by CON_ID or distinguish V$ from GV$. This is fine for non-CDB or single-PDB
+targets, but if this dashboard is ever pointed at a multi-PDB CDB or a RAC cluster, incident
+detection could silently miss or double-count evidence — call this out explicitly in any RCA
+narrative generated against a target confirmed to be a CDB or RAC environment, rather than
+assuming the AWR snapshot already reflects the whole environment.
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CAPACITY, CACHING & CONNECTION-ARCHITECTURE GUIDE
+# (Oracle DB Performance Tuning Guide 19c, Ch.4/12/15/18 — instance caging,
+#  Resource Manager CPU limits, server/client result cache, shared-server
+#  dispatcher contention. These are diagnostic blind spots for a tool that
+#  only reasons from AWR/ASH-style wait-event and time-model evidence,
+#  because they change WHAT baseline a metric like AAS/CPU should be judged
+#  against, or explain low-wait-event "invisible" bottlenecks.)
+# ─────────────────────────────────────────────────────────────────────────────
+CAPACITY_AND_CACHING_GUIDE = """
+CAPACITY CEILINGS, CACHING LAYERS & CONNECTION ARCHITECTURE — RCA ACCURACY NOTES:
+
+=== INSTANCE CAGING — THE HIDDEN DENOMINATOR BEHIND "CPU SATURATION" VERDICTS ===
+Instance caging limits a single database instance to a FIXED number of CPUs via the
+CPU_COUNT initialization parameter, so that multiple instances co-located on the same host
+(consolidation) do not starve each other. When instance caging is active, Oracle Database
+Resource Manager enforces CPU allocation as if only CPU_COUNT CPUs exist for that instance —
+NOT the host's full physical/logical CPU count.
+  • Any AAS-vs-CPU-count saturation ratio (average active sessions ÷ number of CPUs) MUST be
+    computed against the EFFECTIVE CPU_COUNT visible to the instance, not the host's total
+    CPU count, or the computed saturation ratio will be systematically wrong (understated) on
+    a caged instance — e.g. an instance capped at CPU_COUNT=4 on a 32-CPU host showing AAS=10
+    is heavily CPU-saturated (2.5x its cap), even though 10/32 looks unremarkable.
+  • The AWR report header's "CPUs" field can reflect either the host's physical CPU count or
+    the instance's effective CPU_COUNT depending on platform and caging configuration — do not
+    assume it is always the host total. When an AWR-derived CPU-saturation verdict looks
+    inconsistent with OS-level evidence (e.g. host vmstat/OS Statistics showing much lower
+    utilization than the AWR-derived ratio implies, or vice versa), consider instance caging /
+    a non-default CPU_COUNT as a candidate explanation before concluding the math is wrong.
+  • Symptom pattern consistent with an UNDER-SIZED cage (not a true host-wide CPU shortage):
+    high "CPU" or "scheduler" related wait time in the target instance's AWR while sibling
+    instances on the same host and/or host-level OS statistics show comparatively idle CPU.
+
+=== ORACLE DATABASE RESOURCE MANAGER — CPU THROTTLING MECHANISMS BEYOND SIMPLE CPU_COUNT ===
+Beyond instance caging, Resource Manager can throttle CPU in ways that do NOT show up as
+classic wait events, which is why AWR-only analysis can under-diagnose resource-manager
+contention:
+  • max_utilization_limit — a hard ceiling (%) on CPU a consumer group may use; sessions in
+    a throttled low-priority consumer group will show elongated elapsed time with LOW
+    reported CPU/wait time, because the Resource Manager pre-emptively withholds CPU rather
+    than the session actively waiting on a instrumented wait event.
+  • Runaway-query controls (11.2.0.2+) — Resource Manager can cap the maximum execution time
+    for a call, or auto-demote a long-running query to a lower-priority consumer group
+    mid-execution; a query that "gets slower over time" within a single execution, or that
+    is unexpectedly demoted, can be explained by this rather than a data/plan change.
+  • parallel_target_percentage — caps the percentage of the parallel server pool a single
+    consumer group may consume; when the cap is hit, ADDITIONAL parallel statements are
+    QUEUED (not run with fewer DOP, not showing a normal wait event) until slots free up.
+    Symptom pattern: parallel SQL statements with abnormally long elapsed time but unremarkable
+    per-execution wait-event profiles, especially clustered around known batch/ETL windows
+    where multiple parallel jobs compete — investigate Resource Manager consumer-group/
+    parallel_target_percentage configuration before concluding the SQL itself regressed.
+
+=== SHARED SERVER (MTS) / DISPATCHER CONTENTION — A CONNECTION-LAYER BOTTLENECK CLASS ===
+If the target instance uses the shared-server architecture (dispatchers + shared servers,
+governed by the DISPATCHERS, MAX_DISPATCHERS, SHARED_SERVERS, and MAX_SHARED_SERVERS
+initialization parameters) rather than dedicated-server connections, an entire class of
+bottleneck exists UPSTREAM of normal session-level wait events: request/response queueing at
+the dispatcher and shared-server-pool level.
+  • V$QUEUE — WAIT (cumulative centiseconds waited) and TOTALQ (requests placed on the queue)
+    for the COMMON queue (all shared-server request queue) and per-dispatcher response
+    queues. Average wait per request = WAIT / TOTALQ; a rising trend here signals shared
+    servers or dispatchers are UNDER-provisioned relative to connection/request volume.
+  • V$SHARED_SERVER — one row per shared server process; count of rows with STATUS != 'QUIT'
+    gives the currently active shared server count, comparable against MAX_SHARED_SERVERS to
+    detect the pool is pinned at its ceiling.
+  • V$DISPATCHER / V$DISPATCHER_RATE — per-dispatcher connection/busy statistics; CUR_/AVG_/
+    MAX_ prefixed columns in V$DISPATCHER_RATE show current, average, and peak request/response
+    rates — a dispatcher pegged near its MAX_ rate with a growing V$QUEUE wait time is
+    functionally saturated even though no single session shows a classic Oracle wait event.
+  • V$PROCESS_POOL — relevant when prespawned/pooled dedicated-server connection brokering is
+    in use, distinct from shared-server pooling.
+  Diagnostic implication: on a shared-server instance, elevated response time with LOW
+  session-level wait-event evidence and normal SQL execution plans should raise dispatcher/
+  shared-server queueing as a candidate root cause, not be dismissed as "no evidence found".
+
+=== SERVER & CLIENT RESULT CACHE — AN OVERLOOKED LEVER FOR REPEATED-QUERY CPU/LOGICAL-READ LOAD ===
+The result cache (a SQL-query and PL/SQL-function result cache living inside the shared pool
+for the SERVER-side cache, or an OCI client-process memory area for the CLIENT-side cache) is
+a distinct caching layer from the buffer cache / library cache, and is frequently unused by
+default (RESULT_CACHE_MODE defaults to MANUAL, requiring an explicit RESULT_CACHE hint or
+table annotation).
+  • When AWR/SQL evidence shows the SAME query (or equivalent parameterized query) executing
+    very frequently, scanning a comparatively small, mostly-static result set (classic OLAP/
+    reporting/dashboard-style read-mostly queries), and consuming disproportionate CPU/logical
+    reads relative to its business value, enabling result caching (RESULT_CACHE hint, or a
+    RESULT_CACHE (MODE FORCE) table annotation) is a legitimate, low-risk recommendation
+    alongside or instead of classic SQL/index tuning — it eliminates re-execution entirely
+    rather than making execution cheaper.
+  • Requirements/restrictions worth checking before recommending it: the query must build from
+    a current, committed read-consistent snapshot (or a fixed flashback-query point); results
+    depending on non-deterministic constructs (SYSDATE, SEQUENCE.NEXTVAL/CURRVAL, SYS_GUID,
+    non-constant SYS_CONTEXT) are excluded from caching and can silently fail to benefit; an
+    active transaction in the same session referencing the underlying objects makes that
+    query's results ineligible for caching.
+  • Health-check signal: query V$RESULT_CACHE_STATISTICS for "Create Count Failure" and
+    "Delete Count Valid" (should be low on a well-tuned cache) versus "Find Count" (should be
+    high) to confirm whether an ALREADY-enabled result cache is actually being effective,
+    versus recommending enabling it fresh.
+  • Do not conflate the result cache with the buffer cache or library cache when discussing
+    "why is this identical query re-reading/re-executing every time" — result caching is the
+    mechanism that specifically eliminates full re-execution of an unchanged query, whereas
+    buffer cache only avoids the physical I/O portion and library cache only avoids the
+    hard-parse portion.
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PRACTITIONER INSIGHTS  (field experience from Oracle AWR/ASH training sessions)
 # ─────────────────────────────────────────────────────────────────────────────
 PRACTITIONER_INSIGHTS = """
@@ -1306,6 +1808,185 @@ Field example: latch: cache buffers chains in top waits. ASH showed 5 SQLs all w
 """
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ADDITIONAL STATISTICS — Read Consistency, Row Migration, Host Comparability
+# (Oracle 19c Performance Tuning Guide, Ch. 10 "Instance Tuning Using Performance
+#  Views" §10.2.4 Additional Statistics, and Ch. 8 "Comparing Database Performance
+#  Over Time" §8.3.1 Header Section)
+# ─────────────────────────────────────────────────────────────────────────────
+ADDITIONAL_STATISTICS_GUIDE = """
+ADDITIONAL INSTANCE ACTIVITY STATISTICS — READ CONSISTENCY, ROW MIGRATION, HOST COMPARABILITY:
+
+=== READ CONSISTENCY / DELAYED BLOCK CLEANOUT (consistent changes vs consistent gets) ===
+V$SYSSTAT statistics: "consistent gets", "consistent gets from cache", "consistent changes".
+"consistent changes" counts the number of times a session had to apply undo (rollback)
+  to a buffer to reconstruct a read-consistent version of a block for a query.
+Healthy systems: consistent changes should be a very small fraction (well under 0.5%) of
+  consistent gets. A rising ratio between two AWR compare periods means queries are doing
+  MORE rollback work per read — evidence of:
+  • A long-running query started before a batch of concurrent DML committed (classic
+    read-consistency conflict — the reader must undo the writer's uncommitted/recent changes
+    to see the block as of its own SCN).
+  • Delayed block cleanout: a mass INSERT/UPDATE commits, but Oracle does not immediately
+    clean out the ITL/lock byte on every block it touched (to avoid extra redo at commit
+    time). The FIRST session to read those blocks afterward pays the cleanout cost,
+    inflating consistent changes and "cleanout - number of ktugct calls" for that session.
+Fix: shorten long-reader windows, move heavy reporting queries off peak-DML hours, verify
+  UNDO_RETENTION covers the longest query duration, and consider running a warm-up
+  SELECT COUNT(*) immediately after a large load to force cleanout while undo is fresh.
+
+=== ROW MIGRATION / CHAINING (table fetch continued row) ===
+V$SYSSTAT statistic: "table fetch continued row" — counts fetches that required visiting
+  a SECOND (or further) block because the row did not fit in its original block.
+Two distinct causes:
+  • Row CHAINING: the row itself is too large to fit in a single block (common with large
+    VARCHAR2/CLOB columns, or PCTFREE/block size too small for the row width). Chaining
+    cannot always be avoided by respacing — sometimes the row is simply bigger than the block.
+  • Row MIGRATION: an UPDATE grows a row (e.g., populating a previously NULL/sparse column)
+    so it no longer fits in its original block; Oracle moves the entire row to a new block
+    and leaves a forwarding pointer behind, so EVERY future access costs two I/Os instead
+    of one (fetch the pointer block, then follow to the migrated block).
+Rule of thumb: "table fetch continued row" as a percentage of total row fetches
+  (table fetch continued row / (table fetch continued row + table fetch by rowid)) below
+  roughly 1% is unlikely to have a measurable performance impact. A rising percentage
+  between two AWR compare periods on the same table workload is a genuine regression signal.
+Diagnosis: ANALYZE TABLE <name> LIST CHAINED ROWS INTO CHAINED_ROWS (after running
+  $ORACLE_HOME/rdbms/admin/utlchain.sql to create the CHAINED_ROWS table).
+Fix: increase PCTFREE on the affected table so rows have headroom to grow in place without
+  migrating, then ALTER TABLE <name> MOVE to eliminate existing migrated rows (indexes on
+  the table become UNUSABLE after MOVE and must be rebuilt).
+
+=== HOST / SYSTEM CONFIGURATION COMPARABILITY (AWR Compare Periods header) ===
+Before trusting the magnitude of any wait-event or load-profile delta between two AWR
+snapshots, confirm the "Report Summary" / "Snapshot Set" header of each snapshot shows the
+SAME number of CPUs and comparable physical memory. Oracle's own Compare Periods
+methodology treats this as a precondition — the report compares RATES and PERCENTAGES,
+which are only meaningful when computed against the same underlying capacity.
+If CPU count or memory differs between good/bad periods (VM resize, node failover in a
+RAC cluster, migration to different hardware), normalise CPU-relative metrics before
+drawing conclusions:
+  • Use AAS / CPU count instead of raw AAS.
+  • Use DB CPU % of DB Time (unaffected by CPU count) rather than raw DB CPU seconds.
+  • Treat the DIRECTION of a wait-event change as valid; treat the raw MAGNITUDE with caution.
+"""
+
+
+QUERY_TRANSFORMATION_GUIDE = """
+QUERY TRANSFORMATION GUIDE (Oracle SQL Tuning Guide Ch.5 — how the optimizer REWRITES
+queries before costing them; explains unfamiliar VW_*/SYS_TEMP_* names in plans):
+
+Before costing access paths and joins, the optimizer may rewrite the query into an equivalent
+but differently-shaped form. These rewrites are automatic and cost-gated (the transformed
+query is only used if it is CHEAPER) — recognizing them prevents mistaking optimizer-generated
+plan artifacts for application bugs.
+
+=== OR EXPANSION (UNION ALL rewrite of OR conditions) ===
+A disjunctive predicate on TWO DIFFERENT indexed columns (WHERE a.col1='X' OR b.col2='Y')
+prevents index use on either column when treated as one unit. The optimizer splits it into a
+UNION ALL of two branches, each using its own index, with an LNNVL() filter in the second
+branch to avoid double-counting rows that match both conditions.
+Plan signature: VIEW VW_ORE_xxxxxxxx wrapping a UNION-ALL with LNNVL predicates.
+Diagnostic value: if you see full table scans instead, OR expansion was NOT triggered — check
+  whether cost favored the untransformed plan, or whether OR conditions span un-indexed columns.
+
+=== VIEW MERGING (simple + complex) ===
+The optimizer merges a view's query block into the outer query block so ALL tables (view +
+outer) are visible together, opening up join orders and index-based joins that were impossible
+when the view was optimized in isolation.
+  • Simple view merging: plain SELECT-PROJECT-JOIN views. Blocked by GROUP BY, DISTINCT,
+    outer join, MODEL, CONNECT BY, set operators, or subqueries in the SELECT list inside the view.
+  • Complex view merging: views with GROUP BY/DISTINCT can still be merged — the optimizer
+    delays the GROUP BY/DISTINCT until AFTER the joins (can be a big win if joins filter heavily,
+    or a loss if the view's own filters were doing the filtering).
+Diagnostic value: an unmerged view plan shows a VIEW step with its own isolated join subplan
+  (often forced full scans because the view's WHERE clause can't reach outer-query predicates).
+  If two logically similar reports differ in performance and one uses a raw table while the other
+  wraps it in a view, check whether the view is actually being merged (absence of VIEW as an
+  isolated child in the plan = merged).
+
+=== PREDICATE PUSHING ===
+When a view CANNOT be merged (e.g., it uses UNION/UNION ALL), the optimizer instead pushes
+the outer query's WHERE predicate DOWN into each branch of the view's query, so each branch
+can still use its own indexes on the pushed column.
+Diagnostic value: look for the same filter predicate repeated inside multiple UNION branches in
+  the plan's Predicate Information — that is predicate pushing working correctly; its absence on
+  a UNION-based view is a missed-optimization signal worth a hint (PUSH_PRED) or rewrite.
+
+=== SUBQUERY UNNESTING ===
+A WHERE col IN (SELECT ... ) subquery is transformed into a plain join when the optimizer can
+prove it returns the same rows (e.g., the subquery column is a primary/unique key, guaranteeing
+no duplication). This lets the optimizer choose join order/method/access path freely instead of
+executing the subquery as a separate, isolated step.
+If unnesting is NOT possible (correlated subquery with aggregates like AVG, or no uniqueness
+  guarantee), the database executes parent and subquery as separate plans and merges results —
+  usually far more expensive for large row counts. A FILTER operation with a nested subquery
+  plan underneath (rather than a join) is the signature of a subquery that did NOT unnest.
+
+=== STAR TRANSFORMATION (fact/dimension star schema — relevant to DW/batch AWR workloads) ===
+For a large fact table joined to several small dimension tables with restrictive dimension filters,
+the optimizer rewrites each dimension join into a subquery predicate ("bitmap semijoin"), uses
+BITMAP INDEX RANGE SCAN + BITMAP MERGE + BITMAP AND/OR to build a combined rowid set
+from the dimension filters BEFORE touching the fact table, then fetches only the qualifying fact
+rows by rowid — avoiding a full scan of a fact table that could be billions of rows.
+Requires: bitmap indexes on each fact-table foreign key column; STAR_TRANSFORMATION_ENABLED
+  = true (default is FALSE — must be explicitly enabled, or TEMP_DISABLE variant).
+Plan signature: BITMAP KEY ITERATION / BITMAP MERGE / BITMAP AND / BITMAP CONVERSION TO
+  ROWIDS feeding a TABLE ACCESS BY (USER) ROWID on the fact table; note "star transformation
+  used for this statement" in the plan Note section.
+Watch for: TEMP TABLE TRANSFORMATION / LOAD AS SELECT preceding it — this means the
+  optimizer could not eliminate the join-back to a dimension table and materialized the dimension
+  subquery results into a temp segment (adds a table-creation + load cost, still usually a net win).
+If a large star join on this schema shows a plain HASH JOIN + full fact scan instead of the above
+  bitmap pattern, that is a missed star-transformation opportunity — check bitmap indexes exist
+  on the fact table's FK columns and STAR_TRANSFORMATION_ENABLED is not FALSE.
+
+=== TABLE EXPANSION (partitioned tables with indexed "read-mostly" + unindexed "active" partitions) ===
+A common pattern: keep bitmap/B-tree local indexes only on OLD, stable partitions of a large
+time-partitioned table (to avoid index-maintenance overhead on the actively-loaded partition),
+and mark indexes UNUSABLE on the current/active partition. Without table expansion, ANY
+unusable index on ANY partition the query touches forces the optimizer to abandon the index
+for ALL partitions (full scan of everything). Table expansion rewrites the query into a UNION ALL
+  — one branch per index-availability group — so indexed partitions still get index access while
+only the unindexed partition falls back to a full (single-partition) scan.
+Plan signature: VIEW VW_TE_xxxx wrapping a UNION-ALL where one branch uses
+  TABLE ACCESS BY LOCAL INDEX ROWID and the other uses TABLE ACCESS FULL on a single partition.
+Diagnostic value: seeing a full table scan across ALL partitions of a large partitioned table when
+  most partitions ARE indexed strongly suggests table expansion was not available/considered —
+  check EXPAND_TABLE hint or investigate why the transformation was rejected (cost or semantics
+  such as the table appearing on the right side of an outer join, which blocks it).
+
+=== QUERY REWRITE WITH MATERIALIZED VIEWS (correctness risk, not just performance) ===
+If a materialized view's definition is compatible with the user's query, the optimizer can rewrite
+the query to select from the (much smaller, precomputed) materialized view instead of the base
+tables — controlled by QUERY_REWRITE_ENABLED and QUERY_REWRITE_INTEGRITY.
+QUERY_REWRITE_INTEGRITY has three levels with materially different correctness guarantees:
+  • ENFORCED (default, safest): only uses validated PK/FK constraints; results guaranteed identical
+    to querying the base tables directly.
+  • TRUSTED: trusts unenforced RELY constraints and declared (but not validated) dimensions/keys
+    — CAN return WRONG RESULTS if the trusted relationship is actually violated by the data.
+  • STALE_TOLERATED: will use a materialized view even if it has NOT been refreshed since the
+    last base-table DML — maximum rewrite opportunity, but results can reflect stale data.
+Diagnostic value: if a query result looks wrong or inconsistent with the underlying detail tables,
+  and a materialized view with ENABLE QUERY REWRITE exists on the same tables, check
+  QUERY_REWRITE_INTEGRITY and the materialized view's last refresh time (DBA_MVIEWS /
+  DBA_MVIEW_REFRESH_TIMES) before assuming an application bug. Use
+  DBMS_MVIEW.EXPLAIN_REWRITE to confirm whether/why a rewrite did or didn't happen.
+
+=== JOIN FACTORIZATION (UNION ALL queries sharing common tables) ===
+When multiple branches of a UNION ALL reference the SAME base table with the SAME (or a
+subset of the same) join/filter predicates, the optimizer can factor that table's scan+filter out of
+every branch and perform it only ONCE, joining the shared result back into each branch's
+remaining logic. Common in ETL/reporting SQL built by concatenating near-duplicate SELECT
+blocks.
+Plan signature: the factored table appears once, joined to a view wrapping the remaining
+UNION-ALL logic — instead of once per UNION branch.
+Diagnostic value: a UNION ALL report query that scans the same large table N times (once per
+  branch) in the plan indicates join factorization was not applied — check whether the branches'
+  join/filter predicates on the shared table are different enough to block factorization, or whether
+  DISTINCT in a branch is blocking it (join factorization is invalid across a DISTINCT branch).
+"""
+
+
 def get_full_knowledge_base() -> str:
     """
     Returns the complete Oracle PE knowledge base as a single string,
@@ -1336,6 +2017,8 @@ def get_full_knowledge_base() -> str:
         "",
         JOIN_METHOD_GUIDE,
         "",
+        QUERY_TRANSFORMATION_GUIDE,
+        "",
         BIND_VARIABLE_GUIDE,
         "",
         SQL_PLAN_MANAGEMENT,
@@ -1346,7 +2029,17 @@ def get_full_knowledge_base() -> str:
         "",
         LATCH_CONTENTION_GUIDE,
         "",
+        DIAGNOSTIC_VIEWS_GUIDE,
+        "",
+        ADDM_METHODOLOGY_GUIDE,
+        "",
+        DATA_DICTIONARY_ARCHITECTURE_GUIDE,
+        "",
+        CAPACITY_AND_CACHING_GUIDE,
+        "",
         PRACTITIONER_INSIGHTS,
+        "",
+        ADDITIONAL_STATISTICS_GUIDE,
         "=" * 70,
     ])
 
@@ -1409,6 +2102,18 @@ def get_compact_knowledge_for_prompt() -> str:
         "enq: TX ITL → INITRANS too low; use ASSM",
         "enq: TX index → monotonic index right-hand insert; reverse key or hash partition",
         "",
+        "### Additional Instance Stats (rising ratio between periods = regression)",
+        "table fetch continued row / (that + table fetch by rowid) > 1% → row chaining/migration;",
+        "  increase PCTFREE then ALTER TABLE MOVE; find rows via ANALYZE...LIST CHAINED ROWS",
+        "consistent changes / consistent gets rising → read-consistency rollback overhead;",
+        "  long reader vs concurrent DML, or delayed block cleanout after a big commit",
+        "CPU count or physical memory differs between good/bad snapshot header → hardware changed;",
+        "  normalise to AAS/CPU and DB CPU % before trusting raw delta magnitude",
+        "AAS > CPU_COUNT is NOT automatically 'CPU saturated' — CPU_COUNT can be Resource-Manager-caged",
+        "  (Instance Caging) below the host's physical CPUs. Check resmgr:cpu quantum wait event and",
+        "  max_utilization_limit before concluding hardware exhaustion; a caging cap produces the same",
+        "  AAS>CPU signature as real saturation but the fix is the Resource Manager plan, not more hardware.",
+        "",
         "### SQL Analysis Rules (Oracle 12c SQL Tuning for Developers)",
         "PLAN REGRESSION: plan_hash_value changed → pin old plan via SPM immediately.",
         "  DBMS_SPM.LOAD_PLANS_FROM_CURSOR_CACHE(sql_id, plan_hash_value=>:old_phv)",
@@ -1450,9 +2155,11 @@ def get_compact_knowledge_for_prompt() -> str:
         "",
         "### Memory Decision Rules",
         "Buffer cache: hit% <95% AND V$DB_CACHE_ADVICE factor <0.8 at 2x → increase DB_CACHE_SIZE",
+        "  Check V$DATABASE.FORCE_FULL_DB_CACHING first — if enabled, default-caching heuristics don't apply.",
         "Shared pool: library hit% <95% OR V$SHARED_POOL_ADVICE shows significant savings → increase",
         "PGA: over_allocation_count>0 OR global_memory_bound<1MB → must increase PGA_AGGREGATE_TARGET",
-        "  PGA cache hit% <80% AND direct path read temp dominant = PGA is the bottleneck",
+        "  PGA cache hit% <60% (Oracle-documented floor) = confirmed PGA bottleneck; 80%+ is the healthy target, not the fail line.",
+        "  Name the exact culprit via V$SQL_WORKAREA → V$SQL → V$SQL_PLAN (join on sql_id) before recommending a PGA increase.",
         "Redo buffer: redo buffer allocation retries >0 → increase LOG_BUFFER",
         "",
         "### Instance Efficiency Thresholds",

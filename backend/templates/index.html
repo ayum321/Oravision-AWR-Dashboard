@@ -3652,6 +3652,7 @@ function classifyAndAnnotate(ctx) {
     const _hwmCascade = (verdict.causalPatterns || []).find(p => p.id === 'HWM_ITL_CASCADE');
     if (_hwmCascade && verdict.categoryScores) {
         const _ioScoreBefore = verdict.categoryScores.IO_BOTTLENECK || 0;
+        const _pvBefore16 = verdict.primaryVerdict;
         if (_ioScoreBefore > 0) {
             verdict.categoryScores.IO_BOTTLENECK = Math.min(_ioScoreBefore, 20); // cap so it can't win
             // Override role map: sequential reads are a side effect, not root cause
@@ -3689,6 +3690,20 @@ function classifyAndAnnotate(ctx) {
                     _ioCat.reason += ` [CAPPED by HWM_ITL_CASCADE: was ${_ioScoreBefore}, now ${verdict.categoryScores.IO_BOTTLENECK}]`;
                 }
             }
+            // Audit trail — factual record of exactly what this pattern changed in the
+            // verdict, so the UI can PROVE the connection instead of asserting it.
+            _hwmCascade.verdictImpact = {
+                applied: true,
+                cappedCategory: 'IO_BOTTLENECK',
+                scoreBefore: _ioScoreBefore,
+                scoreAfter: verdict.categoryScores.IO_BOTTLENECK,
+                roleMapChanged: true,
+                primaryVerdictChanged: verdict.primaryVerdict !== _pvBefore16,
+                primaryVerdictBefore: _pvBefore16,
+                primaryVerdictAfter: verdict.primaryVerdict,
+            };
+        } else {
+            _hwmCascade.verdictImpact = { applied: false, note: 'IO_BOTTLENECK score was already 0 — nothing to cap; pattern is evidence-only for this snapshot.' };
         }
     }
 
@@ -3704,6 +3719,7 @@ function classifyAndAnnotate(ctx) {
     const _dpCheckpoint = (verdict.causalPatterns || []).find(p => p.id === 'DIRECT_PATH_CHECKPOINT');
     if (_dpCheckpoint && verdict.categoryScores) {
         const _clScoreBefore = verdict.categoryScores.COMMIT_LOGGING || 0;
+        const _pvBefore17 = verdict.primaryVerdict;
         if (_clScoreBefore > 0) {
             verdict.categoryScores.COMMIT_LOGGING = Math.min(_clScoreBefore, 20); // cap so commit-frequency can't win
         }
@@ -3742,6 +3758,18 @@ function classifyAndAnnotate(ctx) {
                 _clCat.reason += ` [CAPPED by DIRECT_PATH_CHECKPOINT: was ${_clScoreBefore}, now ${verdict.categoryScores.COMMIT_LOGGING}]`;
             }
         }
+        // Audit trail — factual record of exactly what this pattern changed in the
+        // verdict, so the UI can PROVE the connection instead of asserting it.
+        _dpCheckpoint.verdictImpact = {
+            applied: true,
+            roleMapChanged: true,
+            cappedCategory: _clScoreBefore > 0 ? 'COMMIT_LOGGING' : null,
+            scoreBefore: _clScoreBefore,
+            scoreAfter: verdict.categoryScores.COMMIT_LOGGING || 0,
+            primaryVerdictChanged: verdict.primaryVerdict !== _pvBefore17,
+            primaryVerdictBefore: _pvBefore17,
+            primaryVerdictAfter: verdict.primaryVerdict,
+        };
     }
 
     // 5b. Store on window so cross-section functions (analyzeSessionConnections) can access
@@ -7253,15 +7281,19 @@ function detectCausalPatterns(ctx, verdict) {
         if (_shifted) {
             patterns.push({
                 id: 'BOTTLENECK_SHIFT',
-                label: 'Bottleneck shift — old wait resolved, new wait emerged',
+                label: 'Bottleneck shift — the top wait event changed between periods',
                 confidence: (_badTopPct >= 25 && _goodTopNowPct < _goodTopPct * 0.3) ? 'CONFIRMED' : 'PROBABLE',
                 signals: [
-                    { icon: '📉', text: `Previous bottleneck: ${_goodTopName} dropped ${n1(_goodTopPct)}% → ${n1(_goodTopNowPct)}% DB Time` },
-                    { icon: '📈', text: `New bottleneck: ${_badTopName} rose to ${n1(_badTopPct)}% DB Time` },
-                    { icon: '🔄', text: `The performance profile shifted — these are different problems, not the same one evolving` },
+                    { icon: '📉', text: `Baseline period's top wait, ${_goodTopName}, was ${n1(_goodTopPct)}% of DB Time there — it is only ${n1(_goodTopNowPct)}% of DB Time in the problem period, so it is not driving the current issue` },
+                    { icon: '📈', text: `Problem period's top wait is now ${_badTopName}, at ${n1(_badTopPct)}% of DB Time` },
+                    { icon: '🔄', text: `Different wait event is dominant now — treat this as a separate diagnosis, not a continuation of the ${_goodTopName} issue` },
                 ],
-                direction: `The old bottleneck (${_goodTopName}) was resolved or reduced, but a new bottleneck (${_badTopName}) now dominates. This is a bottleneck shift, not a regression of the same issue. Investigate ${_badTopName} as a fresh problem — do not assume it was masked by the previous bottleneck.`,
+                direction: `${_goodTopName} was the dominant wait in the baseline period but has since dropped to ${n1(_goodTopNowPct)}% of DB Time — it is resolved or no longer relevant. ${_badTopName} is the dominant wait in the problem period instead, at ${n1(_badTopPct)}% of DB Time. These are two distinct wait events with (unless another pattern below says otherwise) no established causal link between them — do not assume fixing ${_goodTopName} caused ${_badTopName}, and investigate ${_badTopName} on its own evidence.`,
                 fixQuery: `-- Confirm the shift in TIME terms (not just %): each event's wait-time delta\nSELECT event_name,\n  ROUND((MAX(time_waited_micro)-MIN(time_waited_micro))/1e6,1) delta_secs\nFROM dba_hist_system_event\nWHERE snap_id IN (&good_snap_end, &bad_snap_end)\n  AND dbid = (SELECT dbid FROM v$database)\n  AND event_name IN ('${_goodTopName}','${_badTopName}')\nGROUP BY event_name\nORDER BY delta_secs DESC;`,
+                // Hidden field (not rendered) used only for the cross-pattern
+                // reconciliation check below — lets us detect when a more specific
+                // pattern already explains this exact "new" event.
+                _newBottleneckEvent: _badTopName,
             });
         }
     }
@@ -7431,6 +7463,23 @@ function detectCausalPatterns(ctx, verdict) {
                 fixQuery: `-- Step 1: Confirm the object-checkpoint / write-latency signature\nSELECT event, total_waits, time_waited,\n  ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) avg_ms\nFROM v$system_event\nWHERE event IN ('enq: KO - fast object checkpoint','write complete waits',\n                'db file parallel write','free buffer waits','direct path read')\nORDER BY time_waited DESC;\n\n-- Step 2: Which object is being checkpointed (KO enqueue) via ASH in the bad window\nSELECT o.owner, o.object_name, o.object_type, COUNT(*) ash_samples\nFROM dba_hist_active_sess_history h\nJOIN dba_objects o ON o.object_id = h.current_obj#\nWHERE h.event = 'enq: KO - fast object checkpoint'\n  AND h.snap_id BETWEEN &bad_snap_begin AND &bad_snap_end\nGROUP BY o.owner, o.object_name, o.object_type\nORDER BY ash_samples DESC FETCH FIRST 10 ROWS ONLY;\n\n-- Step 3: Dirty-block / write pressure per segment\nSELECT * FROM (\n  SELECT object_name, statistic_name, value\n  FROM v$segment_statistics\n  WHERE statistic_name IN ('physical writes','physical writes direct','direct reads')\n  ORDER BY value DESC\n) WHERE ROWNUM <= 15;`,
             });
         }
+    }
+
+    // ── Reconciliation: BOTTLENECK_SHIFT is a generic "old wait down, new wait
+    // up" heuristic. It explicitly tells the reader the new event is a FRESH,
+    // UNRELATED problem ("do not assume it was masked by the previous
+    // bottleneck"). If a more specific mechanism pattern detected in this same
+    // pass (e.g. DIRECT_PATH_CHECKPOINT explaining free buffer waits as a
+    // write-pressure co-symptom) already accounts for that exact event, the two
+    // cards contradict each other and mislead the reader. Drop the generic one
+    // — the specific, mechanism-backed explanation wins.
+    const _bsIdx = patterns.findIndex(p => p.id === 'BOTTLENECK_SHIFT');
+    if (_bsIdx !== -1) {
+        const _bsEvent = (patterns[_bsIdx]._newBottleneckEvent || '').toLowerCase().trim();
+        const _explainedElsewhere = _bsEvent && patterns.some((p, i) => i !== _bsIdx &&
+            `${p.direction||''} ${(p.signals||[]).map(s=>s.text).join(' ')} ${(p.chain||[]).join(' ')}`
+                .toLowerCase().includes(_bsEvent));
+        if (_explainedElsewhere) patterns.splice(_bsIdx, 1);
     }
 
     return patterns;
@@ -15586,16 +15635,20 @@ ORDER BY snap_id;`,
         }
 
         // -- CAUSAL PATTERNS → ACTION ITEMS wiring -------------------------
-        // Surface high-confidence causal patterns as action items so they
-        // appear in the PE Action Priority Queue, not just Block G display.
+        // Surface causal patterns as action items so they appear in the PE
+        // Action Priority Queue, not just Block G display. POSSIBLE-confidence
+        // patterns are included too (previously silently dropped here) but at
+        // the lowest urgency tier with an explicit "unconfirmed" hedge, so a
+        // real diagnostic signal never vanishes — it's just honestly labelled.
         const _cpActions = (ctx.verdict?.causalPatterns || []).filter(p =>
-            p.confidence !== 'POSSIBLE' && p.fixQuery && p.direction);
+            p.fixQuery && p.direction);
         for (const cp of _cpActions) {
-            const _cpPrio = cp.confidence === 'CONFIRMED' ? 'IMPORTANT' : 'INVESTIGATE';
-            const _cpCol  = cp.confidence === 'CONFIRMED' ? '#f59e0b' : '#06b6d4';
+            const _cpPrio = cp.confidence === 'CONFIRMED' ? 'IMPORTANT' : cp.confidence === 'POSSIBLE' ? 'MONITOR' : 'INVESTIGATE';
+            const _cpCol  = cp.confidence === 'CONFIRMED' ? '#f59e0b' : cp.confidence === 'POSSIBLE' ? '#6366f1' : '#06b6d4';
+            const _cpTitle = cp.confidence === 'POSSIBLE' ? `Investigate (unconfirmed): ${cp.label}` : cp.label;
             actions.push({
                 prio: _cpPrio, col: _cpCol,
-                title: cp.label,
+                title: _cpTitle,
                 sql: cp.fixQuery,
                 expect: cp.direction.split(/(?<=[.!?])\s+/).slice(0, 2).join(' '),
             });
@@ -18167,71 +18220,53 @@ function generateComparisonAISummary(ctx) {
 
     // -------------------------------------------------------------
     // BLOCK G — CAUSAL CONNECTIONS (cross-signal pattern engine)
-    // Surfaces only when ≥1 causal pattern fired. Each pattern card
-    // shows: confidence badge, evidence bullets, and a "therefore" direction line.
+    // Dashboard = quick insight only. Full mechanism, evidence bullets,
+    // Root Cause Chain, Fix steps and verification SQL live on the
+    // OraVision RCA Verdict tab (generateComparisonVerdictNarrative /
+    // _causalPatBlock). Here we render one compact warning/critical row
+    // per pattern so the dashboard flags the culprit without duplicating
+    // the full narrative, then deep-links to the RCA Verdict tab.
     // -------------------------------------------------------------
     const causalPatterns = (v.causalPatterns || []);
     let blockG = '';
     if (causalPatterns.length > 0) {
-        const confColor = { CONFIRMED: '#22c55e', PROBABLE: '#f59e0b', POSSIBLE: '#64748b' };
-        const confBg    = { CONFIRMED: 'rgba(34,197,94,0.08)', PROBABLE: 'rgba(245,158,11,0.07)', POSSIBLE: 'rgba(100,116,139,0.07)' };
-        const patCards = causalPatterns.map(p => {
+        const confColor = { CONFIRMED: '#ef4444', PROBABLE: '#f59e0b', POSSIBLE: '#64748b' };
+        const confBg    = { CONFIRMED: 'rgba(239,68,68,0.08)', PROBABLE: 'rgba(245,158,11,0.07)', POSSIBLE: 'rgba(100,116,139,0.07)' };
+        const sevRows = causalPatterns.map(p => {
+            const vi = p.verdictImpact;
+            // Severity: a pattern that already changed the primary verdict (or is
+            // CONFIRMED confidence) is CRITICAL — it IS the diagnosed root cause.
+            // Everything else is a WARNING-level signal worth investigating.
+            const isCritical = p.confidence === 'CONFIRMED' || (vi && vi.applied && vi.primaryVerdictChanged);
+            const sevLabel = isCritical ? 'CRITICAL' : 'WARNING';
+            const sevIcon  = isCritical ? '\u{1F534}' : '\u26A0\uFE0F';
             const cc = confColor[p.confidence] || '#64748b';
             const cb = confBg[p.confidence]    || 'rgba(100,116,139,0.07)';
-            const sqlBadge = p.sql ? `<span style="font-size:8px;color:#a78bfa;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.25);padding:1px 7px;border-radius:3px;font-family:monospace;margin-left:6px">${esc(p.sql)}</span>` : '';
-            const refBadge = p.ref ? `<span style="font-size:7.5px;color:#64748b;background:rgba(100,116,139,0.15);border:1px solid rgba(100,116,139,0.3);padding:1px 6px;border-radius:3px;margin-left:4px;font-weight:700">${esc(p.ref)}</span>` : '';
-            const bullets = (p.signals||[]).map(s =>
-                `<div style="display:grid;grid-template-columns:16px 1fr;gap:6px;padding:3px 0">
-                    <span style="font-size:11px;text-align:center;line-height:1.6">${s.icon}</span>
-                    <div style="font-size:10.5px;color:#94a3b8;line-height:1.6">${esc(s.text)}</div>
-                </div>`
-            ).join('');
-            // Structured root-cause chain (preferred, short + scannable). Falls back to the
-            // old single "Therefore:" paragraph for patterns not yet converted to this schema.
-            const therefore = (p.chain && p.chain.length) ? `
-                <div style="margin-top:7px;padding:7px 10px;background:rgba(15,23,42,0.5);border-radius:4px">
-                    <div style="font-size:8.5px;font-weight:800;color:#38bdf8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px">Root Cause Chain</div>
-                    ${p.chain.map((step, i) => `<div style="display:grid;grid-template-columns:14px 1fr;gap:6px;padding:2px 0">
-                        <span style="font-size:9.5px;font-weight:800;color:#38bdf8">${i + 1}</span>
-                        <span style="font-size:10.5px;color:#7dd3fc;line-height:1.55">${esc(step)}</span>
-                    </div>`).join('')}
+            const oneLine = esc((p.direction || (p.chain && p.chain[0]) || '').split(/(?<=[.!?])\s+/)[0] || '');
+            const linkedNote = vi && vi.applied
+                ? `<span style="color:#34d399;font-weight:700">Linked to RCA verdict</span>`
+                : `<span style="color:#94a3b8">Evidence-only signal</span>`;
+            return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:${cb};border-left:3px solid ${cc};border-radius:0 5px 5px 0;margin-bottom:6px">
+                <span style="font-size:12px;flex-shrink:0;line-height:1.4">${sevIcon}</span>
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+                        <span style="font-size:8px;font-weight:900;color:${cc};text-transform:uppercase;letter-spacing:0.5px">${sevLabel}</span>
+                        <span style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:0.3px">${esc(p.confidence)}</span>
+                        <span style="font-size:10.5px;font-weight:700;color:#e2e8f0">${esc(p.label)}</span>
+                    </div>
+                    <div style="font-size:10px;color:#94a3b8;line-height:1.5">${oneLine}</div>
+                    <div style="font-size:9px;margin-top:3px">${linkedNote} &nbsp;·&nbsp; <a href="javascript:void(0)" onclick="switchTab('rca')" style="color:#38bdf8;text-decoration:none;font-weight:700">View full analysis in OraVision RCA Verdict \u2192</a></div>
                 </div>
-                ${(p.fix && p.fix.length) ? `<div style="margin-top:6px;padding:7px 10px;background:rgba(34,197,94,0.05);border-radius:4px">
-                    <div style="font-size:8.5px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px">Fix</div>
-                    ${p.fix.map(f => `<div style="display:grid;grid-template-columns:12px 1fr;gap:6px;padding:2px 0">
-                        <span style="font-size:10px;color:#4ade80">\u2192</span>
-                        <span style="font-size:10.5px;color:#a7f3d0;line-height:1.55">${esc(f)}</span>
-                    </div>`).join('')}
-                </div>` : ''}`
-                : `<div style="margin-top:7px;padding:6px 10px;background:rgba(15,23,42,0.5);border-radius:4px;font-size:10px;color:#7dd3fc;line-height:1.6">
-                    <span style="color:#38bdf8;font-weight:700">Therefore: </span>${esc(p.direction)}
-                </div>`;
-            const fixBlock = p.fixQuery ? (() => {
-                const fqId = 'fq-' + Math.random().toString(36).slice(2,8);
-                return `<div style="margin-top:6px">
-                    <button onclick="const d=document.getElementById('${fqId}');const a=this.querySelector('.arr');if(d.style.display==='none'){d.style.display='block';a.textContent='▲';}else{d.style.display='none';a.textContent='▼';}" style="display:flex;align-items:center;gap:5px;background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.2);border-radius:4px;padding:3px 9px;cursor:pointer;font-size:8.5px;font-weight:700;color:#38bdf8">
-                        Verify / Remediate SQL
-                        <span class="arr" style="font-size:8px">▼</span>
-                    </button>
-                    <div id="${fqId}" style="display:none;margin-top:4px;padding:8px 10px;background:rgba(2,6,23,0.7);border:1px solid rgba(56,189,248,0.15);border-radius:4px;font-size:9px;font-family:monospace;color:#7dd3fc;white-space:pre-wrap;line-height:1.6;overflow-x:auto">${esc(p.fixQuery)}</div>
-                </div>`;
-            })() : '';
-            return `<div style="padding:10px 13px;background:${cb};border-left:3px solid ${cc};border-radius:0 6px 6px 0;margin-bottom:8px">
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap">
-                    <span style="font-size:8.5px;font-weight:900;color:${cc};text-transform:uppercase;letter-spacing:0.5px">${esc(p.confidence)}</span>
-                    <span style="font-size:10.5px;font-weight:700;color:#e2e8f0">${esc(p.label)}</span>
-                    ${refBadge}${sqlBadge}
-                </div>
-                ${bullets}
-                ${therefore}
-                ${fixBlock}
             </div>`;
         }).join('');
         blockG = `<div style="margin-bottom:10px;padding:10px 14px;background:rgba(15,23,42,0.45);border:1px solid rgba(56,189,248,0.15);border-radius:8px">
-            <div style="font-size:9.5px;font-weight:900;color:#38bdf8;text-transform:uppercase;letter-spacing:1px;margin-bottom:9px">
-                &#x1F517; Causal Connections — Signals Confirmed Across Multiple Dimensions
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:9px">
+                <span style="font-size:9.5px;font-weight:900;color:#38bdf8;text-transform:uppercase;letter-spacing:1px">
+                    &#x1F517; Causal Patterns Detected — ${causalPatterns.length} finding${causalPatterns.length !== 1 ? 's' : ''}
+                </span>
+                <span style="font-size:8.5px;color:#64748b">Full mechanism, chain &amp; fix in the RCA Verdict tab</span>
             </div>
-            ${patCards}
+            ${sevRows}
         </div>`;
     }
 
@@ -23693,6 +23728,21 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         const rankBadge = rank
             ? `<span style="min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:900;color:#0f172a;background:${cc};border-radius:50%;padding:0 5px;flex-shrink:0">${rank}</span>`
             : `<span style="font-size:8.5px;font-weight:700;color:${cc};background:${cb};border:1px solid ${cc}35;padding:1px 6px;border-radius:3px;text-transform:uppercase">Also Consider</span>`;
+        // Verdict-connection proof strip — same audit-trail fact used on the
+        // Dashboard's compact warning row, shown here in full so the reader can
+        // see exactly what this pattern changed in the primary verdict (or that
+        // it's evidence-only). Sourced from p.verdictImpact — never fabricated.
+        const vi = p.verdictImpact;
+        const viBlock = vi && vi.applied
+            ? `<div style="margin-top:7px;padding:6px 9px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:4px;font-size:9.5px;color:#a7f3d0;line-height:1.6">`
+                + `<b style="color:#34d399">&#10003; Connected to RCA verdict:</b> `
+                + `${vi.cappedCategory ? `capped <b>${esc(vi.cappedCategory)}</b> score (${vi.scoreBefore}\u2192${vi.scoreAfter}); ` : ''}`
+                + `${vi.roleMapChanged ? `reassigned wait-event roles to match this mechanism; ` : ''}`
+                + `${vi.primaryVerdictChanged ? `<b>primary verdict changed ${esc(vi.primaryVerdictBefore||'—')} \u2192 ${esc(vi.primaryVerdictAfter||'—')}</b> because of this pattern.` : `primary verdict (<b>${esc(vi.primaryVerdictAfter||'—')}</b>) already matches this mechanism.`}`
+                + `</div>`
+            : (vi && !vi.applied
+                ? `<div style="margin-top:7px;padding:6px 9px;background:rgba(100,116,139,0.06);border:1px solid rgba(100,116,139,0.18);border-radius:4px;font-size:9px;color:#94a3b8;line-height:1.5"><b style="color:#cbd5e1">Verdict impact:</b> ${esc(vi.note||'Not applied — condition not met for this snapshot.')}</div>`
+                : `<div style="margin-top:7px;padding:6px 9px;background:rgba(100,116,139,0.06);border:1px solid rgba(100,116,139,0.18);border-radius:4px;font-size:9px;color:#94a3b8;line-height:1.5"><b style="color:#cbd5e1">Verdict impact:</b> Evidence-only — not yet wired to override category scoring or wait-event roles.</div>`);
         return `<div style="padding:10px 12px;background:${cb};border-left:3px solid ${cc};border-radius:0 6px 6px 0;margin-bottom:7px">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
                 ${rankBadge}
@@ -23702,6 +23752,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
             <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${keySignals}</div>
             <div style="font-size:10.5px;color:#cbd5e1;line-height:1.7">${mechText}</div>
             ${dirRestBlock}
+            ${viBlock}
             ${fqBlock}
         </div>`;
     };
@@ -23719,7 +23770,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
         _causalPatBlock = `
         <div style="margin-top:14px;padding:12px 14px;background:rgba(2,6,23,0.55);border:1px solid rgba(165,180,252,0.22);border-radius:8px">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;flex-wrap:wrap">
-                <span style="font-size:9.5px;font-weight:900;color:#a5b4fc;text-transform:uppercase;letter-spacing:1px">⚡ Causal Diagnosis — Action Priority</span>
+                <span style="font-size:9.5px;font-weight:900;color:#a5b4fc;text-transform:uppercase;letter-spacing:1px">⚡ Causal Diagnosis — Culprit Pattern(s) Behind This Verdict</span>
                 <span style="font-size:8px;color:#64748b;font-weight:600">${esc(_summaryLabel)}</span>
             </div>
             ${_pRows}
@@ -26265,12 +26316,14 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
     })();
 
     // Gap C: when the structured WHY is shown it already renders a rich
-    // "Contributing Factors" decomposition, so the causal-pattern block reads as
-    // a duplicate contributor list. Demote it to a collapsed disclosure in that
-    // case (keeps the ranked detection available); when only the plain-prose
-    // fallback is shown, keep it expanded since nothing else competes.
-    const _causalPatBlockOut = (_causalPatBlock && _whyStructuredHtml)
-        ? `<details style="margin-top:12px"><summary style="font-size:9px;color:#64748b;cursor:pointer;list-style:none;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 0">Causal pattern detection (ranked) \u25be</summary>${_causalPatBlock}</details>`
+    // "Contributing Factors" decomposition, so a causal-pattern block with NO
+    // confirmed/probable findings (only low-confidence "Also Consider" items)
+    // reads as a duplicate contributor list — collapse THAT case only. Any
+    // block that contains a CONFIRMED or PROBABLE finding names the actual
+    // culprit and must stay visible on this page (that's the whole point of
+    // asking "why it happened") — never hide it behind a generic disclosure.
+    const _causalPatBlockOut = (_causalPatBlock && _whyStructuredHtml && _cpPriority.length === 0)
+        ? `<details style="margin-top:12px"><summary style="font-size:9px;color:#64748b;cursor:pointer;list-style:none;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 0">Low-confidence patterns detected (unconfirmed) \u25be</summary>${_causalPatBlock}</details>`
         : _causalPatBlock;
 
     const whyBlockFinal = `<div class="ov-section ov-section--why" style="margin:0 0 18px;padding:16px 18px;background:rgba(165,180,252,0.06);border:1px solid rgba(165,180,252,0.22);border-left:4px solid #a5b4fc;border-radius:0 10px 10px 0;animation:section-glow-purple 3.6s ease-in-out infinite;position:relative;overflow:hidden">`+
@@ -33552,11 +33605,25 @@ function renderWaitComparison(ctx) {
     // (e) Single highest-pct2 non-idle event if it's clearly dominant
     const _topBadRow = rows.filter(r => !/idle|DB CPU/i.test(r.name||'')).sort((a,b) => b.pct2 - a.pct2)[0];
     if (_topBadRow && _topBadRow.pct2 >= 5) _rcaLinkedNames.add(_topBadRow.name);
-    // Pre-compute counts for header display
-    const _focusCount = rows.filter(r => !/idle/i.test(r.wc||'') && (
-        _rcaLinkedNames.has(r.name) || r.pct2 >= 2 || Math.abs(r.pct2 - r.pct1) > 3 || r.avg2 >= 20
-    )).length;
-    const _hiddenCount = rows.filter(r => !/idle/i.test(r.wc||'')).length - _focusCount;
+    // Pre-compute counts for header display — mirrors the row-level impact gate below
+    // (only genuinely degraded/RCA-linked events count as "impactful"; Idle/Other-class
+    // background noise and flat/improved rows are excluded even if their raw numbers are large).
+    const _hdrHasDom = rows.some(r => (r.pct2 - r.pct1) > 40);
+    const _focusCount = rows.filter(r => {
+        const d = r.pct2 - r.pct1;
+        const isMajor = d > 10, isNotable = d > 5;
+        const tDelta = (r.t2||0) - (r.t1||0);
+        const tRel = r.t1 > 0 ? (tDelta/r.t1)*100 : (tDelta > 0 ? 999 : 0);
+        const timeUp = tDelta > 0 && tRel >= 10 && (r.t2 >= 60 || r.pct2 >= 2);
+        const latDelta = r.avg1 > 0 ? ((r.avg2-r.avg1)/r.avg1)*100 : (r.avg2 > 0 ? 999 : 0);
+        const latNew = r.avg1 <= 0 && r.avg2 > 0;
+        const latUp = r.avg2 > 0 && ((latDelta >= 50 && r.avg2 >= 20) || (r.avg2 >= 1000 && r.avg2 > r.avg1*1.1) || (latNew && r.avg2 >= 50));
+        const isThr = /commit/i.test(r.wc||'') && d < 0 && _hdrHasDom;
+        const isRcaLinked = _rcaLinkedNames.has(r.name);
+        const isNoiseClass = /^(idle|other)$/i.test(r.wc||'') && !isRcaLinked;
+        return !isNoiseClass && (isRcaLinked || isMajor || isNotable || timeUp || latUp || isThr);
+    }).length;
+    const _hiddenCount = rows.length - _focusCount;
 
     // Register wait panel findings on ctx._panelInsights
     const _worsened = rows.filter(r => (r.pct2 - r.pct1) > 3 && r.pct2 >= 1);
@@ -33795,13 +33862,19 @@ function renderWaitComparison(ctx) {
             <div id="hot-segments-comparison" style="padding:0"></div>
         </div>
 
-        <div class="card overflow-x-auto">
+        <div class="card overflow-x-auto" style="overflow:hidden;border-radius:12px">
 
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #1e293b">
-                <span style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase">Wait Events — <span style="color:#818cf8;font-weight:800">${_focusCount}</span> impactful / ${rows.length} total${_hiddenCount > 0 ? ` <span style="color:#475569;font-size:9px">(${_hiddenCount} low-impact hidden)</span>` : ''}</span>
+            <div style="padding:14px 20px 12px;border-bottom:1px solid rgba(255,255,255,0.04);background:linear-gradient(90deg,rgba(129,140,248,0.05),rgba(56,189,248,0.03),transparent);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,#818cf8,#38bdf8);box-shadow:0 0 10px rgba(129,140,248,0.4),0 0 20px rgba(56,189,248,0.15)"></div>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.3px">Wait Events — <span style="color:#a5b4fc;font-weight:800">${_focusCount}</span> impactful <span style="color:#475569;font-weight:500">/ ${rows.length} total</span></div>
+                        <div style="font-size:10.5px;color:#64748b;margin-top:2px">Showing only events that genuinely degraded, are rising, or are tied to the diagnosed root cause${_hiddenCount > 0 ? ` — <span style="color:#475569">${_hiddenCount} idle/stable/noise event${_hiddenCount===1?'':'s'} hidden</span>` : ''}</div>
+                    </div>
+                </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                    <span style="font-size:9px;color:#475569">Sort:</span>
-                    <select id="wait-sort-select" onchange="_sortWaitTable(this.value)" style="font-size:9px;color:#c7d2fe;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:2px 6px;cursor:pointer">
+                    <span style="font-size:10px;color:#64748b;font-weight:600">Sort:</span>
+                    <select id="wait-sort-select" onchange="_sortWaitTable(this.value)" style="font-size:10px;color:#c7d2fe;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:5px 8px;cursor:pointer">
                         <option value="tdelta" selected>Δ Total Wait Time (priority)</option>
                         <option value="max_pct">Max % DB Time</option>
                         <option value="pct2">Bad % DB Time</option>
@@ -33811,14 +33884,14 @@ function renderWaitComparison(ctx) {
                         <option value="w2">Occurrences (Bad)</option>
                         <option value="name">Event Name A→Z</option>
                     </select>
-                    ${_hiddenCount > 0 ? `<button onclick="document.querySelectorAll('#wait-events-tbody tr.wait-minor-row').forEach(r=>r.style.display=r.style.display==='none'?'':'none');this.textContent=this.textContent.includes('Hide')?'Show ${_hiddenCount} low-impact':'Hide low-impact'" style="font-size:9px;color:#818cf8;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.2);border-radius:4px;padding:2px 8px;cursor:pointer">Show ${_hiddenCount} low-impact</button>` : ''}
+                    ${_hiddenCount > 0 ? `<button onclick="document.querySelectorAll('#wait-events-tbody tr.wait-minor-row').forEach(r=>r.style.display=r.style.display==='none'?'':'none');this.textContent=this.textContent.includes('Hide')?'Show ${_hiddenCount} hidden':'Hide low-impact'" title="Reveal idle-class, Other-class, and stable/improved events that were filtered out as noise" style="font-size:10px;color:#a5b4fc;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.25);border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600;white-space:nowrap">Show ${_hiddenCount} hidden</button>` : ''}
                 </div>
             </div>
 
-            <div style="padding:5px 12px;border-bottom:1px solid #0f172a;font-size:9px;color:#64748b;line-height:1.6;background:rgba(15,23,42,0.4)">
-                <b style="color:#94a3b8">Reading this table:</b>
-                <span style="color:#cbd5e1">% DB Time</span> = share of DB time, good → bad (normalised) ·
-                <span style="color:#cbd5e1">Total Time (Δ)</span> = <b style="color:#f8b4b4">absolute</b> cumulative seconds (Σ waits × latency), good → bad — the true impact ·
+            <div style="padding:8px 20px;border-bottom:1px solid #0f172a;font-size:10.5px;color:#94a3b8;line-height:1.7;background:rgba(15,23,42,0.4)">
+                <b style="color:#cbd5e1">Reading this table:</b>
+                <span style="color:#e2e8f0">% DB Time</span> = share of DB time, good → bad (normalised) ·
+                <span style="color:#e2e8f0">Total Time (Δ)</span> = <b style="color:#f8b4b4">absolute</b> cumulative seconds (Σ waits × latency), good → bad — the true impact ·
                 <span style="color:#cbd5e1">Avg Latency / wait</span> = ms per <b>single</b> wait, good → bad (slower each = storage / contention) ·
                 <span style="color:#cbd5e1">Occurrences</span> = how many waits, good → bad (more = higher volume).
                 Sorted by largest Total-Time increase. <span style="color:#475569">A share (Δ) can fall while absolute time rises — that is why Total Time, not % delta, drives priority.</span>
@@ -33896,8 +33969,21 @@ function renderWaitComparison(ctx) {
                         const ann=_getWaitAnnotation(r.name,r.pct2,r.avg2);
                         // RCA linkage + impact gate — drives badge and default visibility
                         const _isRcaLinked = _rcaLinkedNames.has(r.name);
-                        // Impactful = always shown; minor = hidden until user requests
-                        const _isImpactful = _isRcaLinked || r.pct2 >= 2 || Math.abs(d) > 3 || r.avg2 >= 20 || _latUp;
+                        // 'Idle' and 'Other' wait classes are mostly background/housekeeping noise
+                        // (client think-time, PX/dispatcher/rdbms-ipc bookkeeping) that can post huge
+                        // absolute totals and still trip the Major/Notable thresholds below, looking
+                        // like a critical bottleneck when it is not. Only let them through if the
+                        // RCA/SQL-correlation engine independently tied this exact event to the
+                        // diagnosed root cause (e.g. resmgr:cpu quantum when Resource Manager is
+                        // genuinely throttling) — otherwise treat as noise regardless of numbers.
+                        const _isNoiseClass = /^(idle|other)$/i.test(r.wc||'') && !_isRcaLinked;
+                        // Impactful = always shown; minor = hidden until user requests.
+                        // Also excludes flat/trivial "Stable"/mild-"Improved" rows — only events
+                        // that actually degraded (Major/Notable/Rising/Latency Spike) or are RCA-
+                        // linked count as impactful; pure improvements and noise stay in the
+                        // low-impact bucket rather than cluttering the default view.
+                        const _isDegraded = isMajor || isNotable || _timeUp || _latUp || _isThr;
+                        const _isImpactful = !_isNoiseClass && (_isRcaLinked || _isDegraded);
                         const isMinor = !_isImpactful;
                         // S6c: bad avg ms color
                         const _avg2Col=r.avg2>=500?'#ef4444':r.avg2>=100?'#f97316':r.avg2>=10?'#fbbf24':'#475569';

@@ -485,6 +485,38 @@ def _build_oracle_prompt(ctx: dict) -> str:
                     A(f"    {nm}: {_fmt(g_pct)}% → {_fmt(b_pct)}% (+{_fmt(b_pct-g_pct,1)}pp)")
         A("")
 
+    # Oracle documentation cross-check — grounds the analysis in official
+    # Oracle docs (Database Reference, SQL Tuning Guide) actually ingested
+    # into the PDF knowledge base, keyed off the real dominant wait events
+    # and the engine's own verdict so the LLM cites real sources instead of
+    # inventing generic advice.
+    try:
+        from services import pdf_kb
+        _wait_names = [
+            (e.get("event_name") or e.get("name") or "") for e in ev_bad[:5]
+        ]
+        _issue_type = str(
+            verdict.get("primary_bottleneck") or verdict.get("primaryBottleneck")
+            or verdict.get("root_cause") or ""
+        )
+        _sql_type = ""
+        if sql_bad:
+            _first_sql_txt = (sql_bad[0].get("sql_text") or "").strip().upper()
+            for _kw in ("SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"):
+                if _first_sql_txt.startswith(_kw):
+                    _sql_type = _kw
+                    break
+        _pdf_chunks = pdf_kb.cross_check_rca(
+            wait_events=_wait_names, sql_type=_sql_type, issue_type=_issue_type, top_k=4
+        )
+        _pdf_block = pdf_kb.format_chunks_for_prompt(_pdf_chunks, max_chars=1800)
+        if _pdf_block:
+            A(_pdf_block)
+            A("Cross-reference the engine verdict and your analysis against the above official Oracle documentation. Cite the source file and page number when you rely on it. If the documentation contradicts the verdict, say so explicitly.")
+            A("")
+    except Exception:
+        pass  # KB not available or query failed — proceed without it, never block analysis
+
     # Top SQL
     if sql_bad:
         A("## TOP SQL — Problem Period (by DB Time)")

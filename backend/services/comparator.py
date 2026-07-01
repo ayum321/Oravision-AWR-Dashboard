@@ -1858,6 +1858,121 @@ def _detect_incidents(
             ).replace("{sql_id}", worst.sql_id),
         })
 
+    # ── 13. Host / System Configuration Mismatch ─────────────────────────────
+    # Oracle guidance (Compare Periods methodology): confirm both snapshots ran on
+    # comparable hardware before trusting the magnitude of any wait/load delta.
+    good_cpus = _cpu_count(good_data)
+    bad_cpus = _cpu_count(bad_data)
+    good_mem = _float((good_data.get("os_stats", {}) or {}).get("phys_mem_gb", 0))
+    bad_mem = _float((bad_data.get("os_stats", {}) or {}).get("phys_mem_gb", 0))
+    cpu_mismatch = good_cpus > 0 and bad_cpus > 0 and good_cpus != bad_cpus
+    mem_mismatch = good_mem > 0 and bad_mem > 0 and abs(bad_mem - good_mem) / good_mem > 0.10
+    if cpu_mismatch or mem_mismatch:
+        incidents.append({
+            "indicator": "host_config_mismatch",
+            "severity": "warning",
+            "pattern_name": "Host Configuration Mismatch",
+            "description": (
+                "The two comparison periods were not captured on identical hardware — "
+                + (f"CPU count {good_cpus} \u2192 {bad_cpus}. " if cpu_mismatch else "")
+                + (f"Physical memory {good_mem:.1f}GB \u2192 {bad_mem:.1f}GB. " if mem_mismatch else "")
+                + "Per Oracle's AWR Compare Periods methodology, wait-event and load-profile "
+                "deltas are only directly comparable when host configuration is unchanged. "
+                "Treat the magnitude of any delta with caution; direction of change is still valid."
+            ),
+            "evidence": {
+                "good_cpus": good_cpus, "bad_cpus": bad_cpus,
+                "good_mem_gb": round(good_mem, 1), "bad_mem_gb": round(bad_mem, 1),
+            },
+            "remediation": (
+                "Confirm both snapshots were captured on the same instance/host. "
+                "If hardware genuinely changed (resize, migration, RAC node failover), "
+                "normalise per-CPU metrics (AAS/CPU, DB CPU %/CPU) before drawing conclusions "
+                "from raw deltas."
+            ),
+        })
+
+    # ── 14. Row Migration / Chaining (Table Fetch Continued Row) ─────────────
+    good_act = good_data.get("_instance_activity", []) or []
+    bad_act = bad_data.get("_instance_activity", []) or []
+    if good_act or bad_act:
+        g_continued = _lookup_instance_stat(good_act, "table fetch continued row")
+        b_continued = _lookup_instance_stat(bad_act, "table fetch continued row")
+        g_by_rowid = _lookup_instance_stat(good_act, "table fetch by rowid")
+        b_by_rowid = _lookup_instance_stat(bad_act, "table fetch by rowid")
+        g_fetch_total = g_continued + g_by_rowid
+        b_fetch_total = b_continued + b_by_rowid
+        g_chain_pct = (g_continued / g_fetch_total * 100.0) if g_fetch_total > 0 else 0.0
+        b_chain_pct = (b_continued / b_fetch_total * 100.0) if b_fetch_total > 0 else 0.0
+        # Oracle guidance: chained/migrated rows below ~1% of fetches are unlikely to matter.
+        if b_chain_pct > 1.0 and b_chain_pct > g_chain_pct * 1.3:
+            incidents.append({
+                "indicator": "row_migration_chaining",
+                "severity": "critical" if b_chain_pct > 5.0 else "warning",
+                "pattern_name": "Row Migration / Chaining",
+                "description": (
+                    f"'table fetch continued row' is {b_chain_pct:.2f}% of row fetches in the bad "
+                    f"period (was {g_chain_pct:.2f}%). Every migrated/chained row costs an extra "
+                    "I/O to fetch the row's continuation piece. Common cause: PCTFREE too low for "
+                    "a table whose rows grow after INSERT (sparse columns populated later by UPDATE)."
+                ),
+                "evidence": {
+                    "good_continued_row": round(g_continued, 0), "bad_continued_row": round(b_continued, 0),
+                    "good_pct": round(g_chain_pct, 2), "bad_pct": round(b_chain_pct, 2),
+                },
+                "remediation": (
+                    "Identify the offending table: ANALYZE TABLE <name> LIST CHAINED ROWS INTO "
+                    "CHAINED_ROWS (after running $ORACLE_HOME/rdbms/admin/utlchain.sql). "
+                    "Fix: increase PCTFREE, then ALTER TABLE <name> MOVE (rebuild dependent "
+                    "indexes afterward). Avoid inserting sparse rows that are later widened by UPDATE."
+                ),
+                "next_step": "V$SYSSTAT \u2014 table fetch continued row",
+                "diagnostic_sql": (
+                    "SELECT name, value FROM v$sysstat WHERE name = 'table fetch continued row';"
+                ),
+            })
+
+        # ── 15. Read Consistency / Delayed Block Cleanout Overhead ────────────
+        g_cons_changes = _lookup_instance_stat(good_act, "consistent changes")
+        b_cons_changes = _lookup_instance_stat(bad_act, "consistent changes")
+        g_cons_gets = (_lookup_instance_stat(good_act, "consistent gets from cache")
+                       or _lookup_instance_stat(good_act, "consistent gets"))
+        b_cons_gets = (_lookup_instance_stat(bad_act, "consistent gets from cache")
+                       or _lookup_instance_stat(bad_act, "consistent gets"))
+        g_cc_ratio = (g_cons_changes / g_cons_gets * 100.0) if g_cons_gets > 0 else 0.0
+        b_cc_ratio = (b_cons_changes / b_cons_gets * 100.0) if b_cons_gets > 0 else 0.0
+        if b_cc_ratio > 0.5 and b_cc_ratio > g_cc_ratio * 1.5 and b_cons_changes > 1000:
+            incidents.append({
+                "indicator": "read_consistency_overhead",
+                "severity": "warning",
+                "pattern_name": "Read Consistency / Rollback Overhead",
+                "description": (
+                    f"'consistent changes' (undo applied to build read-consistent images) rose to "
+                    f"{b_cc_ratio:.3f}% of consistent gets in the bad period (was {g_cc_ratio:.3f}%). "
+                    "This indicates queries are rolling back concurrent DML changes to reconstruct "
+                    "a read-consistent snapshot \u2014 classic sign of a long reader running against "
+                    "a table with heavy concurrent writes, or delayed block cleanout after a large "
+                    "uncommitted batch."
+                ),
+                "evidence": {
+                    "good_consistent_changes": round(g_cons_changes, 0),
+                    "bad_consistent_changes": round(b_cons_changes, 0),
+                    "good_ratio_pct": round(g_cc_ratio, 3), "bad_ratio_pct": round(b_cc_ratio, 3),
+                },
+                "remediation": (
+                    "Shorten long-running query windows or move them off peak DML hours. "
+                    "Check UNDO_RETENTION against the longest query duration. "
+                    "If caused by a mass INSERT/UPDATE followed immediately by SELECTs, run a "
+                    "dummy SELECT COUNT(*) on the table right after the load to force block "
+                    "cleanout while undo is still available."
+                ),
+                "next_step": "V$SYSSTAT \u2014 consistent changes vs consistent gets",
+                "diagnostic_sql": (
+                    "SELECT name, value FROM v$sysstat WHERE name IN "
+                    "('consistent changes','consistent gets from cache','consistent gets');"
+                ),
+            })
+
     return incidents
 
 

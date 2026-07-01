@@ -587,9 +587,67 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 3,
-      "last_seen": 1782894889.1266785
+      "seen": 9,
+      "last_seen": 1782937693.60026
+    },
+    {
+      "id": "04ac4c0d593b0f17-95849",
+      "db_name": "MEJPRDDB",
+      "signature": {
+        "bottleneck": "Mixed",
+        "severity": "critical",
+        "shift": "I/O\u2192Mixed",
+        "dbt_bucket": "extreme",
+        "dbt_pct": 2900.1,
+        "aas_bad": 219.76,
+        "cpu_capacity_pct": 457.8,
+        "saturated": true,
+        "top_waits": [
+          "enq: hw - contention",
+          "px idle wait",
+          "rdbms ipc message",
+          "space manager: slave idle wait"
+        ],
+        "hash": "04ac4c0d593b0f17"
+      },
+      "verdict_bottleneck": "Mixed",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 2,
+      "last_seen": 1782902574.5103316
+    },
+    {
+      "id": "0b7ae94d403c8b4d-33443",
+      "db_name": "PIMPR3DB",
+      "signature": {
+        "bottleneck": "Commit",
+        "severity": "critical",
+        "shift": "I/O\u2192Commit",
+        "dbt_bucket": "flat",
+        "dbt_pct": -95.7,
+        "aas_bad": 11.59,
+        "cpu_capacity_pct": 72.4,
+        "saturated": false,
+        "top_waits": [
+          "px idle wait",
+          "space manager: slave idle wait",
+          "rdbms ipc message",
+          "log file sync"
+        ],
+        "hash": "0b7ae94d403c8b4d"
+      },
+      "verdict_bottleneck": "Commit",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1782919033.4430785
     }
   ],
-  "updated": 1782894889.1281915
+  "updated": 1782937693.60187
 }
