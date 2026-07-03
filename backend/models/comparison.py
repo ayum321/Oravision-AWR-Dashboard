@@ -6,8 +6,18 @@ from typing import Literal, Optional
 # Shared severity type — single definition reused across all models
 SeverityLevel = Literal["critical", "warning", "info", "good"]
 
-# Shared classification type for wait events
-WaitClassification = Literal["new_bottleneck", "worsening", "improving", "stable", ""]
+# Shared classification type for wait events.
+# idle_noise / idle_growing are a SEPARATE bucket from improving/worsening —
+# idle/background wait growth is not a causal "improvement" or "regression" claim,
+# it's directional information about background housekeeping. idle_growing is kept
+# distinct (not folded into "improving") specifically so PX-starvation-style
+# diagnostics (parallel_max_servers exhaustion showing up as rising PX Idle Wait)
+# remain detectable by a dedicated consumer, without idle noise polluting the
+# default worsening/improving narrative surfaces.
+WaitClassification = Literal[
+    "new_bottleneck", "worsening", "improving", "stable",
+    "idle_noise", "idle_growing", "",
+]
 
 # Shared assessment type for SQL regressions
 NetAssessment = Literal[
@@ -63,6 +73,8 @@ class WaitEventComparison(BaseModel):
     zscore: float = Field(default=0.0, ge=-20.0, le=20.0)
     is_new_dominant: bool = False
     is_disappeared: bool = False     # present in good but absent from bad
+    is_idle: bool = False            # background/PX-slave housekeeping wait — see classification note above
+    elapsed_degraded: bool = False   # good/bad elapsed_secs was missing/<=0 — rate normalization degraded to raw seconds, confidence force-capped
     proportionality_note: str = ""  # set when commit/log-file-sync is proportional to workload change
 
 

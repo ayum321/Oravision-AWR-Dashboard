@@ -27,10 +27,13 @@ Algorithm phases from reference specification:
 """
 from __future__ import annotations
 
+import logging
 import math
 import re
 import statistics
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from models.comparison import (
     ComparisonReport,
@@ -442,6 +445,96 @@ _SEVERITY_WEIGHT: dict[str, float] = {
     "low": 15.0,
 }
 
+# Oracle RCA priority by wait class. A DBA reads serialization/contention first,
+# storage second, and treats idle/background housekeeping as non-actionable noise.
+# Used as a tier multiplier in the priority sort so a Concurrency wait of a given
+# magnitude always outranks an Idle/Other wait of the same raw magnitude.
+_WAIT_CLASS_PRIORITY: dict[str, float] = {
+    "concurrency":  1.00,
+    "application":  0.90,
+    "configuration": 0.80,
+    "commit":       0.70,
+    "cluster":      0.60,
+    "user i/o":     0.55,
+    "system i/o":   0.50,
+    "scheduler":    0.45,
+    "administrative": 0.40,
+    "network":      0.30,
+    "cpu":          0.60,
+    "other":        0.25,   # data-quality alarm: should have been reclassified
+    "idle":         0.05,   # excluded from primary ranking in effect
+}
+
+# Severity weight per classification, used only as the *secondary* (within-tier)
+# sort component in _sort_key below. NOTE: this is keyed on `classification`
+# (worsening/idle_growing/etc.) which is a completely different axis from
+# `wait_class` (Concurrency/Idle/etc.) used by _WAIT_CLASS_PRIORITY above —
+# idle_growing/idle_noise deliberately have NO entry in _WAIT_CLASS_PRIORITY;
+# an idle_growing row's tier still comes from its wait_class ("Idle" -> 0.05),
+# it is never given its own elevated tier.
+_SEV_W: dict[str, float] = {
+    "new_bottleneck": 100.0,
+    "worsening": 70.0,
+    "stable": 15.0,
+    "idle_growing": 20.0,   # surfaces above idle_noise when idle rows are expanded
+    "idle_noise": 3.0,
+    "improving": 5.0,
+}
+_SEV_W_DEFAULT = 5.0
+
+# Dedicated bottom-of-sort tier for elapsed_degraded rows. Confidence-capping
+# alone (see _compare_wait_events) is not enough: tier dominates the sort key
+# before confidence ever gets a say, so a degraded row classified "worsening"
+# in a normally high-priority wait_class (e.g. Concurrency, tier 1.00) would
+# still outrank every clean Idle-tier row despite its numbers being untrustworthy
+# raw-seconds artifacts. "We don't trust this row's numbers" must win the sort
+# outright, the same way is_idle already gets its own low, dedicated tier instead
+# of trusting wait_class. Set below the lowest wait_class tier (idle=0.05) so a
+# degraded row always sinks under even idle noise.
+_DEGRADED_ELAPSED_TIER = 0.01
+
+# Tier-dominance multiplier for the hard-ordering sort key (see _sort_key). This
+# must stay large enough that tier always wins over the secondary score whenever
+# two rows have different tiers. The invariant is asserted at import time below
+# so a future edit that narrows the tier spread, or raises the secondary score's
+# ceiling, fails loudly at startup instead of silently producing a plausible-
+# looking but wrong sort order.
+_TIER_SORT_MULTIPLIER = 100_000.0
+_MAX_POSSIBLE_SECONDARY = 1.0 * max(_SEV_W.values(), default=0.0) + 100.0  # confidence(<=1.0)*sev_w + capped_share(<=100)
+_distinct_tiers = sorted(set(_WAIT_CLASS_PRIORITY.values()) | {_DEGRADED_ELAPSED_TIER})
+_MIN_TIER_GAP = min(
+    (b - a for a, b in zip(_distinct_tiers, _distinct_tiers[1:])),
+    default=float("inf"),
+)
+assert _MIN_TIER_GAP * _TIER_SORT_MULTIPLIER > _MAX_POSSIBLE_SECONDARY, (
+    f"Wait-event sort-key tier dominance invariant broken: min tier gap "
+    f"{_MIN_TIER_GAP} * multiplier {_TIER_SORT_MULTIPLIER} = "
+    f"{_MIN_TIER_GAP * _TIER_SORT_MULTIPLIER} must exceed max possible secondary "
+    f"score {_MAX_POSSIBLE_SECONDARY}, or the class-tier ordering guarantee silently "
+    f"breaks. Widen _TIER_SORT_MULTIPLIER, widen tier gaps in _WAIT_CLASS_PRIORITY, or "
+    f"lower _SEV_W ceiling."
+)
+
+
+def _wait_class_priority(wait_class: str) -> float:
+    return _WAIT_CLASS_PRIORITY.get((wait_class or "other").strip().lower(), 0.25)
+
+
+def _is_idle_wait(event_name: str, wait_class: str) -> bool:
+    """True for idle/background housekeeping waits that must be kept out of the
+    foreground contention ranking regardless of their raw magnitude."""
+    if (wait_class or "").strip().lower() == "idle":
+        return True
+    nl = (event_name or "").lower()
+    return (
+        "idle" in nl
+        or nl.endswith(" timer")
+        or "slave wait" in nl
+        or "ipc message" in nl
+        or "remote message" in nl
+        or "message from client" in nl
+    )
+
 
 def _compare_wait_events(
     good_data: dict,
@@ -458,8 +551,33 @@ def _compare_wait_events(
     # Phase 1 — Normalize wait times to per-second rates when elapsed differs.
     # pct_db_time is already window-normalized by Oracle, so it is the primary
     # comparison signal. Raw time_waited_secs is only used for avg-wait computation.
+    #
+    # This is a data-quality condition, not just a log-worthy event: the fallback
+    # below silently degrades to raw-seconds comparison instead of rate comparison,
+    # which is *worse* than doing nothing when good/bad windows differ in length.
+    # In the production orchestration path (compare_periods -> _compute_period_summary)
+    # elapsed_min<=0 already raises a separate, visible, severity=critical
+    # "invalid_snapshot" incident in incident_indicators (rendered in the RCA panel)
+    # BEFORE this function is ever reached with a bad value — so that path already
+    # has an unmissable UI signal, not a log line nobody tails. The gap this guards
+    # against is direct/bypass callers (tests, scripts, future refactors) that
+    # construct elapsed values without going through that check. For those, warn AND
+    # change behavior: every row produced from a degraded window gets confidence
+    # force-capped and elapsed_degraded=True set on the result object itself (mirrors
+    # is_idle: a queryable field, not just a side-channel log message), so a
+    # frontend consumer can render a per-row/report-level data-quality badge even
+    # outside the production incident path.
+    _elapsed_degraded = good_elapsed_secs <= 0.0 or bad_elapsed_secs <= 0.0
+    if _elapsed_degraded:
+        logger.warning(
+            "_compare_wait_events called with missing elapsed time (good=%.1f, bad=%.1f) — "
+            "per-second wait-rate normalization is degrading to raw-seconds comparison; "
+            "every row in this result is being confidence-capped and flagged elapsed_degraded=True.",
+            good_elapsed_secs, bad_elapsed_secs,
+        )
     g_elapsed = max(good_elapsed_secs, 1.0)
     b_elapsed = max(bad_elapsed_secs, 1.0)
+
 
     all_events = sorted(set(good_map) | set(bad_map))
     comparisons: list[WaitEventComparison] = []
@@ -529,6 +647,13 @@ def _compare_wait_events(
         # Event not in good top-10 AND pct_db_time > 2.0 in bad = NEW_DOMINANT_WAIT
         is_new_dominant = (key not in good_map) and (bad_pct > 2.0)
 
+        # Idle/background housekeeping waits (PX Idle Wait, rdbms ipc message,
+        # pmon timer, *slave wait, etc.) accumulate huge cumulative time across many
+        # background/PX-slave sessions — their pct_db_time can legitimately exceed
+        # 100%. They are NEVER a foreground contention bottleneck, so they are held
+        # out of the worsening/new_bottleneck tiers entirely.
+        _is_idle = _is_idle_wait(event_name, wait_class)
+
         # -- Commit wait proportionality guard --------------------------------
         # log file sync / "Commit" class waits scale directly with transaction rate.
         # If the commit rate fell proportionally to the transaction throughput change,
@@ -579,9 +704,45 @@ def _compare_wait_events(
         )
 
         # Classification
-        if is_new_dominant:
-            classification = "new_bottleneck"
-        elif key in bad_map and key not in good_map:
+        if _is_idle:
+            # Idle/background waits are excluded from the foreground worsening/
+            # new_bottleneck tiers by default (see _WAIT_CLASS_PRIORITY) — but that
+            # is a ranking/visibility decision, not license to make it structurally
+            # impossible to ever flag a genuinely growing idle wait (e.g. rising
+            # "PX Idle Wait" from parallel_max_servers exhaustion, or a slave-wait
+            # pileup). "improving"/"stable" make a causal claim ("this event's
+            # contribution to the problem shrank/held steady") that does not apply
+            # to background noise, so idle waits get their own distinct bucket
+            # instead: idle_growing (materially rising) vs idle_noise (flat or
+            # shrinking). A dedicated consumer (e.g. a PX-starvation detector) can
+            # explicitly filter on classification == "idle_growing" without idle
+            # noise ever leaking into the default worsening/improving narrative.
+            #
+            # Threshold is share-based (delta_pct_db_time > 5pp) OR duration-based
+            # (avg wait latency up >50% and bad_avg_ms >= 20ms). The duration leg
+            # matters independently of share: PX-slave/serialization starvation can
+            # show up as each wait taking longer while occurrence count and %DB-time
+            # share stay flat (queue depth growing per slave, not event count growing) —
+            # a share-only check would miss that shape entirely.
+            #
+            # Share-collapse guard on the duration leg: a real fleet AWR pair surfaced
+            # a row whose share COLLAPSED (delta_pct_db_time as low as -481pp, driven by
+            # the well-known AWR session-count-multiplicity artifact inflating the good
+            # period's %DB-time past 100%) while avg latency still rose — without this
+            # guard the duration leg alone called that row "idle_growing", producing an
+            # incident sentence that would literally read "grew from 500% to 19%", which
+            # is self-contradictory. The duration leg must not fire when share is
+            # collapsing hard; a genuinely growing idle wait does not have its overall
+            # %DB-time share falling by more than a modest amount at the same time.
+            if (
+                delta_pct_db_time > 5.0
+                or (delta_pct > 100.0 and bad_pct > 2.0)
+                or (latency_increased and bad_avg_ms >= 20.0 and delta_pct_db_time > -20.0)
+            ):
+                classification = "idle_growing"
+            else:
+                classification = "idle_noise"
+        elif is_new_dominant:
             classification = "new_bottleneck"
         elif _commit_proportional and not latency_increased:
             # Commit waits look higher in % only because DB Time denominator shrank;
@@ -596,6 +757,12 @@ def _compare_wait_events(
             # Per-wait latency regressed materially even though volume/share did not
             # cross the thresholds above — still a real, worsening bottleneck.
             classification = "worsening"
+        elif key in bad_map and key not in good_map and (bad_pct > 0.5 or bad_avg_ms >= 20.0):
+            # New event that cleared a materiality floor but not the dominance bar
+            # (bad_pct <= 2.0). A genuinely new wait carrying real share or latency
+            # is worth surfacing — but a microscopic single-sample new event
+            # (bad_pct <= 0.5% AND avg < 20ms) must NOT be promoted here.
+            classification = "new_bottleneck"
         elif delta_pct < -50.0:
             classification = "improving"
         else:
@@ -622,6 +789,40 @@ def _compare_wait_events(
             confidence_signals += 1
         confidence = min(confidence_signals / 4.0, 1.0)  # clamp to [0,1]
 
+        # Sample-size reliability discount. A wait attributed to a handful of
+        # occurrences is a textbook AWR snapshot-boundary artifact: Oracle charges
+        # the full in-flight wait duration to whichever snapshot closes while the
+        # session is still waiting, so a single occurrence can post an absurd
+        # multi-minute "average". Such rows must not carry the same confidence as
+        # a high-occurrence, statistically stable wait.
+        if bad_total_waits <= 1:
+            confidence *= 0.25
+        elif bad_total_waits < 10:
+            confidence *= 0.5
+        elif bad_total_waits < 100:
+            confidence *= 0.8
+        # Idle/background waits carry no diagnostic confidence as foreground
+        # bottlenecks. Both branches are CAPS ONLY (never a floor) so the sample-size
+        # reliability discount above always still applies underneath — an earlier
+        # version used max(confidence, 0.3) for idle_growing, which silently
+        # overrode the discount and could force a single-occurrence snapshot-boundary
+        # artifact up to confidence 0.3, clearing the idle_wait_growth incident gate.
+        # Confirmed via live testing against real fleet AWR data that removing the
+        # floor still lets genuine multi-signal idle_growing rows (e.g. a real PX Idle
+        # Wait spike, 3+ confidence signals, moderate sample discount) land at 0.6
+        # unassisted, so no floor is needed to preserve real-signal visibility.
+        if _is_idle:
+            if classification == "idle_growing":
+                confidence = min(confidence, 0.6)
+            else:
+                confidence = min(confidence, 0.1)
+        # Degraded-elapsed guard actually changes the result, not just a log line:
+        # every row computed from a missing/invalid elapsed window is confidence-
+        # capped low regardless of what the raw-seconds math produced above, since
+        # that math is comparing two windows of unknown/mismatched length.
+        if _elapsed_degraded:
+            confidence = min(confidence, 0.15)
+
         # Phase 8 — PATHOLOGY_MAP enrichment
         pathology = _get_pathology(event_name)
         hint = pathology.get("meaning", "")
@@ -633,6 +834,26 @@ def _compare_wait_events(
                     if pattern in event_name.lower():
                         hint = h
                         break
+
+        # Unclassified-but-significant wait detector. Neither PATHOLOGY_MAP nor
+        # ROOT_CAUSE_HINTS has an entry for this event, it isn't idle/background
+        # noise, yet it is consuming a material share of DB Time (same 2.0pp
+        # materiality floor used for is_new_dominant above) — surface a concrete
+        # investigation call-to-action instead of silently rendering a blank hint.
+        # This is deliberately generic rather than claiming a specific root cause:
+        # this tool only ingests AWR's aggregate wait-event rollup (event_name,
+        # time, %DB time, wait_class), not per-wait P1/P2/P3 parameters or ASH
+        # session/blocking-chain rows, so it cannot decode *which* channel/session/
+        # SQL is behind an uncatalogued event on its own — it can only flag that
+        # the event deserves manual ASH investigation.
+        if not hint and not _is_idle and bad_pct >= 2.0:
+            hint = (
+                f"Not yet in the diagnostic knowledge base, but consuming {bad_pct:.1f}% of DB Time — "
+                "high enough to warrant investigation rather than being dismissed as noise. "
+                "Query DBA_HIST_ACTIVE_SESS_HISTORY for this event_name in the bad-period snapshot range "
+                "and group by (p1, p2, sql_id) to find the driving channel/operation and top SQL_ID, "
+                "then check blocking_session for the session actually holding things up."
+            )
 
         comparisons.append(WaitEventComparison(
             event_name=event_name,
@@ -660,20 +881,41 @@ def _compare_wait_events(
             extreme_wait_flag=extreme_wait_flag,
             confidence=round(confidence, 3),
             is_new_dominant=is_new_dominant,
+            is_idle=_is_idle,
+            elapsed_degraded=_elapsed_degraded,
             proportionality_note=_commit_note,
         ))
 
-    # Phase 7 — sort by confidence × severity weight for priority heap behavior
+    # Phase 7 — Oracle-priority sort: class tier is a HARD ordering, not a soft
+    # nudge. An earlier version multiplied tier into an additive secondary score
+    # (tier * (confidence*sev_w + share)), which only worked as a "nudge" — a
+    # high-share/high-confidence Other-class row could tie or beat a modest
+    # Concurrency-class row (e.g. Concurrency worsening conf=0.5 share=10 scores
+    # 1.00*(0.5*70+10)=45 vs Other new_bottleneck conf=0.8 share=90 scores
+    # 0.25*(0.8*100+90)=42.5 — nearly tied, and reversible with slightly higher
+    # Other inputs despite the 4x tier gap). Fixed by scaling tier into a band that
+    # strictly dominates the secondary score: the minimum gap between any two
+    # distinct tier values in _WAIT_CLASS_PRIORITY is 0.05, and the secondary score
+    # is bounded at confidence(<=1.0)*sev_w(<=100) + capped_share(<=100) <= 200, so
+    # multiplying tier by 100_000 guarantees a >=5_000 separation between adjacent
+    # tiers — always larger than the max possible secondary score. Rows only ever
+    # compete on the secondary score when they share the exact same tier.
+    # (_SEV_W, _TIER_SORT_MULTIPLIER, and the dominance invariant assert live at
+    # module scope next to _WAIT_CLASS_PRIORITY so the invariant is checked once
+    # at import time, not silently re-derived here on every call.)
+    #
+    # elapsed_degraded overrides wait_class tier entirely (not just confidence):
+    # confidence-capping alone doesn't stop tier from dominating the sort key, so
+    # a degraded row classified "worsening" in a normally high-priority wait_class
+    # (e.g. Concurrency, tier 1.00) would otherwise still outrank every clean
+    # Idle-tier row on tier membership alone, despite its numbers being untrustworthy
+    # raw-seconds artifacts. "We don't trust this row" must win the sort outright.
     def _sort_key(c: WaitEventComparison) -> float:
-        if c.classification == "new_bottleneck":
-            sev_w = 100.0
-        elif c.classification == "worsening":
-            sev_w = 70.0
-        elif c.classification == "stable":
-            sev_w = 15.0
-        else:
-            sev_w = 5.0
-        return -(c.confidence * sev_w + c.bad_pct_db_time)
+        sev_w = _SEV_W.get(c.classification, _SEV_W_DEFAULT)
+        tier = _DEGRADED_ELAPSED_TIER if c.elapsed_degraded else _wait_class_priority(c.wait_class)
+        capped_share = min(c.bad_pct_db_time, 100.0)
+        secondary = c.confidence * sev_w + capped_share
+        return -(tier * _TIER_SORT_MULTIPLIER + secondary)
 
     comparisons.sort(key=_sort_key)
     return comparisons
@@ -1621,9 +1863,9 @@ def _detect_incidents(
             ),
             "next_step": "SQL Monitor report for spilling SQL",
             "diagnostic_sql": (
-                "SELECT sql_id, operation_type, policy, estimated_optimal_size/1024 AS optimal_kb, "
-                "last_memory_used/1024 AS used_kb, last_execution "
-                "FROM v$sql_workarea_active ORDER BY last_memory_used DESC FETCH FIRST 10 ROWS ONLY;"
+                "SELECT sql_id, operation_type, policy, expected_size/1024 AS expected_kb, "
+                "actual_mem_used/1024 AS used_kb, tempseg_size/1024 AS tempseg_kb "
+                "FROM v$sql_workarea_active ORDER BY actual_mem_used DESC FETCH FIRST 10 ROWS ONLY;"
             ),
         })
 
@@ -1751,7 +1993,7 @@ def _detect_incidents(
             ),
             "next_step": "Wait-class drilldown → Configuration class",
             "diagnostic_sql": (
-                "SELECT consumer_group_name, requests, cpu_wait_time, cpu_waits "
+                "SELECT name, active_sessions, cpu_wait_time, cpu_waits "
                 "FROM v$rsrc_consumer_group ORDER BY cpu_wait_time DESC;"
             ),
         })
@@ -1785,7 +2027,7 @@ def _detect_incidents(
             ),
             "next_step": "Compare periods — batch window good vs bad",
             "diagnostic_sql": (
-                "SELECT job_name, job_class, enabled, state, last_start_date, run_duration "
+                "SELECT job_name, job_class, enabled, state, last_start_date, last_run_duration "
                 "FROM dba_scheduler_jobs WHERE enabled = 'TRUE' ORDER BY last_start_date DESC;"
             ),
         })
@@ -2795,6 +3037,49 @@ def compare_periods(good_data: dict, bad_data: dict) -> ComparisonReport:
 
     # Phase 3 — Causal chain text from PATHOLOGY_MAP DAG traversal
     causal_chain_text = _build_causal_chain_text(wait_comparisons)
+
+    # Idle-growth escape hatch. _WAIT_CLASS_PRIORITY intentionally tier-crushes
+    # Idle-class waits to the bottom of the default ranked wait_comparisons table —
+    # that is correct, idle waits are not themselves a foreground bottleneck. But a
+    # tier-crushed row is still buried under every other row regardless of how
+    # confident or material the idle_growing signal is; nobody scrolls past N hidden
+    # rows to find it. A genuinely growing idle wait (rising PX Idle Wait from
+    # parallel_max_servers exhaustion, slave-wait pileup, etc.) needs a visibility
+    # path independent of that table's sort order, so surface material idle_growing
+    # rows as their own incident — this renders in the always-visible "Performance
+    # Architect — Root-Cause Intelligence" panel regardless of table position.
+    idle_growth_signals = sorted(
+        (wc for wc in wait_comparisons if wc.classification == "idle_growing" and wc.confidence >= 0.3),
+        key=lambda w: w.bad_pct_db_time, reverse=True,
+    )
+    if idle_growth_signals:
+        top = idle_growth_signals[0]
+        incidents.insert(0, {
+            "indicator": "idle_wait_growth",
+            "severity": "warning",
+            "description": (
+                f"{top.event_name} (Idle class) grew from {top.good_pct_db_time:.1f}% to "
+                f"{top.bad_pct_db_time:.1f}% of DB time. Idle/background waits are excluded from "
+                "the primary wait-event ranking by design, but growth of this size can be the only "
+                "visible signature of PX server starvation (parallel_max_servers exhaustion), a "
+                "slave-wait pileup, or another resource-serialization issue masquerading as idle time."
+            ),
+            "evidence": {
+                "idle_waits_growing_total": len(idle_growth_signals),
+                "events": [
+                    f"{w.event_name}: {w.good_pct_db_time:.1f}%→{w.bad_pct_db_time:.1f}% "
+                    f"(confidence {w.confidence:.2f})"
+                    for w in idle_growth_signals[:5]
+                ] + (
+                    [f"...and {len(idle_growth_signals) - 5} more idle wait(s) also growing, not listed individually"]
+                    if len(idle_growth_signals) > 5 else []
+                ),
+            },
+            "remediation": (
+                "Check parallel_max_servers/parallel_servers_target against actual PX server usage "
+                "during the bad-period window, and review GV$PX_SESSION for queued vs. running slaves."
+            ),
+        })
 
     # Add invalid snapshot incidents
     if good_is_invalid:

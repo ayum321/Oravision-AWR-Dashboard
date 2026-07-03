@@ -2109,6 +2109,35 @@ def parse_awr_html(html_content: str) -> dict[str, Any]:
         "enq: us - contention": "Application",
         "enq: tx - index contention": "Concurrency",
         "enq: tx - contention": "Application",
+        # Idle / background housekeeping waits — Oracle tags these Idle in
+        # v$event_name.wait_class. They accumulate huge cumulative wait time
+        # across many PX-slave/background sessions (their % DB time can legitimately
+        # exceed 100%), so they MUST be tagged Idle and kept out of the foreground
+        # contention ranking rather than defaulting to "Other".
+        "px idle wait": "Idle",
+        "px deq: execution msg": "Idle",
+        "px deq credit: send blkd": "Idle",
+        "px deq credit: need buffer": "Idle",
+        "px deq: execute reply": "Idle",
+        "space manager: slave idle wait": "Idle",
+        "class slave wait": "Idle",
+        "emon slave idle wait": "Idle",
+        "lgwr worker group idle": "Idle",
+        "diag idle wait": "Idle",
+        "rdbms ipc message": "Idle",
+        "pmon timer": "Idle",
+        "smon timer": "Idle",
+        "dispatcher timer": "Idle",
+        "shared server idle wait": "Idle",
+        "virtual circuit next request": "Idle",
+        "asm background timer": "Idle",
+        "ges remote message": "Idle",
+        "gcs remote message": "Idle",
+        "heartbeat monitor sleep": "Idle",
+        "lreg timer": "Idle",
+        "wait for unread message on broadcast channel": "Idle",
+        "streams aq: waiting for messages in the queue": "Idle",
+        "single-task message": "Idle",
     }
     try:
         fg_map = {}
@@ -2141,8 +2170,19 @@ def parse_awr_html(html_content: str) -> dict[str, Any]:
                 elif event_lower in _WAIT_CLASS_FALLBACK:
                     ev["wait_class"] = _WAIT_CLASS_FALLBACK[event_lower]
                 else:
-                    # Pattern-based classification for enq: and latch: prefixes
-                    if event_lower.startswith("enq:"):
+                    # Pattern-based classification. Order matters: idle/background
+                    # patterns are checked first so slave/timer/ipc housekeeping waits
+                    # are demoted to Idle instead of being left as "Other" (where they
+                    # slip into the foreground contention ranking and dominate it).
+                    if ("idle" in event_lower
+                            or event_lower.endswith(" timer")
+                            or "slave wait" in event_lower
+                            or "ipc message" in event_lower
+                            or event_lower.endswith(" idle")
+                            or "remote message" in event_lower
+                            or "message from client" in event_lower):
+                        ev["wait_class"] = "Idle"
+                    elif event_lower.startswith("enq:"):
                         ev["wait_class"] = "Application"
                     elif event_lower.startswith("latch:"):
                         ev["wait_class"] = "Concurrency"

@@ -587,8 +587,8 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 9,
-      "last_seen": 1782937693.60026
+      "seen": 30,
+      "last_seen": 1783063273.3779216
     },
     {
       "id": "04ac4c0d593b0f17-95849",
@@ -616,8 +616,8 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 2,
-      "last_seen": 1782902574.5103316
+      "seen": 3,
+      "last_seen": 1782979858.8013992
     },
     {
       "id": "0b7ae94d403c8b4d-33443",
@@ -647,7 +647,65 @@
       "novel": false,
       "seen": 1,
       "last_seen": 1782919033.4430785
+    },
+    {
+      "id": "7e30105a82ca2548-51229",
+      "db_name": "TS7TS1QF",
+      "signature": {
+        "bottleneck": "Commit",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "major",
+        "dbt_pct": 78.8,
+        "aas_bad": 11.59,
+        "cpu_capacity_pct": 72.4,
+        "saturated": false,
+        "top_waits": [
+          "px idle wait",
+          "space manager: slave idle wait",
+          "rdbms ipc message",
+          "log file sync"
+        ],
+        "hash": "7e30105a82ca2548"
+      },
+      "verdict_bottleneck": "Commit",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 8,
+      "last_seen": 1783067331.8868577
+    },
+    {
+      "id": "f0aa0db12b5d9115-37125",
+      "db_name": "PRJ2WT4D",
+      "signature": {
+        "bottleneck": "Commit",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "flat",
+        "dbt_pct": -44.1,
+        "aas_bad": 9.28,
+        "cpu_capacity_pct": 58.0,
+        "saturated": false,
+        "top_waits": [
+          "px idle wait",
+          "space manager: slave idle wait",
+          "rdbms ipc message",
+          "pmon timer"
+        ],
+        "hash": "f0aa0db12b5d9115"
+      },
+      "verdict_bottleneck": "Commit",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1783017437.1259942
     }
   ],
-  "updated": 1782937693.60187
+  "updated": 1783067331.8893154
 }

@@ -186,6 +186,20 @@ Cause: application logic holding locks too long (row-level serialization).
 Fix: (1) find blocking session via V$LOCK, (2) investigate long-running transactions,
 (3) check for missing COMMIT after DML, (4) application-level lock ordering.
 
+Edge case — quarantined transactions (row lock that never clears, no live blocker):
+If enq: TX/row lock waits persist indefinitely after an instance crash or Oracle RAC instance
+recovery, and V$LOCK/V$TRANSACTION show no actively running blocking session, the blocker
+may be an inactive transaction stuck in SMON transaction recovery (crash/instance recovery
+undo rollback) that failed — e.g. due to physical block/undo corruption, logical corruption, or
+memory corruption during recovery. Oracle quarantines the transaction (DBA_QUARANTINED_
+TRANSACTIONS) rather than retry indefinitely, and the row locks it holds are NOT released until
+a DBA intervenes. A quarantine limit of 3 escalates to a full PDB-level shutdown abort (if archive
+logging is enabled) to prevent inconsistent-state operation. This is a rare but distinct root cause
+from ordinary application-level lock contention — suspect it specifically when TX/row-lock waits
+follow shortly after an instance crash or Oracle RAC failover in the AWR timeline, and check
+DBA_QUARANTINED_TRANSACTIONS before assuming an app bug. (Source: Database Concepts
+23ai Ch.13 "Overview of Quarantined Transactions".)
+
 === enq: TX - index contention ===
 Right-hand insert serialization on monotonically increasing index (sequence/timestamp PK).
 Fix: reverse key index (for equality lookups only), hash partitioned index, or sequence cache size.

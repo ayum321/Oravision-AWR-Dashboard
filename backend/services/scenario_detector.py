@@ -477,6 +477,133 @@ def _volume_growth(report: dict) -> list[dict]:
     return findings
 
 
+def _library_cache_hard_parse_thrash(report: dict) -> list[dict]:
+    """Generic hard-parse / no-bind-variable pressure probe.
+
+    A main cause of shared pool and library cache latch contention is parsing
+    (Oracle Performance Tuning Guide, "Identifying Unnecessary Parsing").
+    Statements that cannot share an existing SQL area — most often literal
+    values used instead of bind variables — force a hard parse on every
+    execution. That hard-parse load shows up as BOTH a falling soft-parse
+    ratio and a falling library cache hit ratio at the same time; requiring
+    both to degrade together (not just one drifting alone) rules out an
+    isolated one-off blip in either metric.
+    """
+    findings: list[dict] = []
+    eff_comps = (report.get("instance_efficiency") or {}).get("comparisons") or []
+    soft_row = next((e for e in eff_comps if e.get("metric") == "soft_parse_pct"), None)
+    lib_row = next((e for e in eff_comps if e.get("metric") == "library_cache_hit_pct"), None)
+    if not soft_row or not lib_row:
+        return findings
+    soft_bad = _f(soft_row.get("bad_val"))
+    soft_good = _f(soft_row.get("good_val"))
+    lib_bad = _f(lib_row.get("bad_val"))
+    lib_good = _f(lib_row.get("good_val"))
+    if not (soft_bad < 90.0 and lib_bad < 95.0):
+        return findings
+    if not (soft_bad < soft_good - 2.0 or lib_bad < lib_good - 2.0):
+        return findings
+    findings.append({
+        "scenario": "hard_parse_thrash",
+        "title": f"Hard-parse / shared-pool thrash — soft parse {_n(soft_bad)}%, library cache hit {_n(lib_bad)}%",
+        "severity": "critical" if (soft_bad < 80.0 or lib_bad < 90.0) else "warning",
+        "sql_id": "",
+        "tables": [],
+        "evidence": [
+            f"Soft parse %: {_n(soft_good)}% → {_n(soft_bad)}%",
+            f"Library cache hit %: {_n(lib_good)}% → {_n(lib_bad)}%",
+        ],
+        "why": (
+            "Soft-parse ratio and library cache hit ratio degrading TOGETHER is the signature "
+            "of hard-parse thrash: statements that cannot share an existing SQL area (most often "
+            "literal values instead of bind variables, or a CURSOR_SHARING mismatch) force a full "
+            "hard parse on every execution. A main cause of shared pool / library cache latch "
+            "contention is exactly this repeated parsing — it burns CPU on parsing work and holds "
+            "the library cache latch longer, which is why both ratios move together rather than "
+            "just one drifting on its own."
+        ),
+        "confirm": (
+            "Check V$SQLAREA / V$SQL for statements with a high version_count or a very low "
+            "executions-per-parse ratio and literal (non-bound) predicates. If the application "
+            "cannot bind, CURSOR_SHARING=FORCE is a stop-gap, not a permanent fix — the real fix "
+            "is binding variables at the application layer."
+        ),
+        "kb_tags": ["parse", "shared_pool", "library_cache", "cursor_sharing", "latch"],
+        "kb_match": None,
+    })
+    return findings
+
+
+def _latch_wait_amplification(report: dict) -> list[dict]:
+    """Generic latch-contention probe: a named 'latch: ...' wait event rising
+    alongside a degraded latch hit ratio.
+
+    Latches protect in-memory structures (shared pool, library cache) with a
+    spin-then-sleep strategy — a session that cannot immediately acquire a
+    latch first spins on CPU, and only posts a 'latch: X' wait once it gives
+    up spinning and sleeps. So a rising 'latch: ...' wait time alongside a
+    falling latch hit ratio means real contention, not just background spin
+    noise silently absorbed as CPU.
+    """
+    findings: list[dict] = []
+    eff_comps = (report.get("instance_efficiency") or {}).get("comparisons") or []
+    latch_row = next((e for e in eff_comps if e.get("metric") == "latch_hit_pct"), None)
+    if not latch_row:
+        return findings
+    latch_bad = _f(latch_row.get("bad_val"))
+    latch_good = _f(latch_row.get("good_val"))
+    if latch_bad >= 99.0:
+        return findings
+    comps = (report.get("top_wait_events") or {}).get("comparisons") or []
+    latch_waits = [w for w in comps if str(w.get("event_name", "")).strip().lower().startswith("latch:")]
+    risen = [
+        w for w in latch_waits
+        if _f(w.get("bad_time_secs")) > _f(w.get("good_time_secs")) and _f(w.get("bad_pct_db_time")) >= 2.0
+    ]
+    if not risen:
+        return findings
+    top = max(risen, key=lambda w: _f(w.get("bad_pct_db_time")))
+    findings.append({
+        "scenario": "latch_contention",
+        "title": f"{top.get('event_name','')} rising with latch hit ratio down to {_n(latch_bad)}%",
+        "severity": "critical" if latch_bad < 95.0 else "warning",
+        "sql_id": "",
+        "tables": [],
+        "evidence": [
+            f"Latch hit ratio: {_n(latch_good)}% → {_n(latch_bad)}%",
+            f"{top.get('event_name','')}: {_n(_f(top.get('good_time_secs')))}s → "
+            f"{_n(_f(top.get('bad_time_secs')))}s ({_n(_f(top.get('bad_pct_db_time')))}% of DB time)",
+        ],
+        "why": (
+            "Latches use a spin-then-sleep strategy — a session that cannot immediately "
+            "acquire a latch spins on CPU first, and only records a 'latch: ...' wait once it "
+            "gives up spinning and sleeps. Seeing the named latch wait actually rise in the AWR "
+            "(not just absorbed as background CPU) together with a falling latch hit ratio means "
+            "the contention is heavy enough to push sessions into real sleeps, not just spin noise. "
+            "This is almost always driven by many sessions concurrently hammering the same "
+            "in-memory structure — very often the same hard-parse thrash on non-shared SQL text "
+            "contending for the library cache / shared pool latch."
+        ),
+        "confirm": (
+            "Check V$LATCH / V$LATCHHOLDER for the specific latch name during the problem window, "
+            "and cross-reference against parse activity — latch contention is very often a "
+            "symptom of hard-parse thrash rather than an independent cause."
+        ),
+        "kb_tags": ["latch", "contention", "cpu", "shared_pool"],
+        "kb_match": None,
+    })
+    return findings
+
+
+# NOTE: a "log file switch (checkpoint incomplete)" probe was deliberately NOT
+# added here — comparator.py's _detect_incidents() already has a more mature
+# "Log Switch / Redo File Undersizing" check (broader event match + redo-size
+# correlation). That check's real problem was that it (and 14 siblings) were
+# computed but never rendered anywhere in the UI — fixed by wiring
+# incident_indicators into renderScenarioIntel() in index.html instead of
+# duplicating the check here.
+
+
 # ── public API ───────────────────────────────────────────────────────────────
 
 _SEV_RANK = {"critical": 0, "warning": 1, "info": 2}
@@ -576,6 +703,8 @@ def detect(report: dict, cpu_count: int = 0) -> list[dict]:
         findings += _parallel_oversubscription(report or {}, cpu_count)
         findings += _latency_spike(report or {})
         findings += _dirty_buffer_write_pressure(report or {})
+        findings += _library_cache_hard_parse_thrash(report or {})
+        findings += _latch_wait_amplification(report or {})
         findings.sort(key=lambda f: _SEV_RANK.get(f.get("severity", "info"), 3))
         return findings
     except Exception:  # noqa: BLE001 — the dashboard must never break on this
