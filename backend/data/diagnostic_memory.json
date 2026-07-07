@@ -326,8 +326,8 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 3,
-      "last_seen": 1782803895.67883
+      "seen": 4,
+      "last_seen": 1783076529.5671754
     },
     {
       "id": "92419d09c51afda6-76478",
@@ -587,8 +587,8 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 30,
-      "last_seen": 1783063273.3779216
+      "seen": 34,
+      "last_seen": 1783341886.9240036
     },
     {
       "id": "04ac4c0d593b0f17-95849",
@@ -616,8 +616,8 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 3,
-      "last_seen": 1782979858.8013992
+      "seen": 6,
+      "last_seen": 1783342019.7836516
     },
     {
       "id": "0b7ae94d403c8b4d-33443",
@@ -674,8 +674,8 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
-      "seen": 8,
-      "last_seen": 1783067331.8868577
+      "seen": 28,
+      "last_seen": 1783341970.078287
     },
     {
       "id": "f0aa0db12b5d9115-37125",
@@ -703,9 +703,241 @@
       "confirmed_root_cause": "",
       "source": "live",
       "novel": false,
+      "seen": 2,
+      "last_seen": 1783077159.9551141
+    },
+    {
+      "id": "d932bdd0174ae094-75583",
+      "db_name": "PRSHGYJI",
+      "signature": {
+        "bottleneck": "CPU",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "moderate",
+        "dbt_pct": 31.8,
+        "aas_bad": 4.87,
+        "cpu_capacity_pct": 60.9,
+        "saturated": false,
+        "top_waits": [
+          "rdbms ipc message",
+          "px idle wait",
+          "space manager: slave idle wait",
+          "pmon timer"
+        ],
+        "hash": "d932bdd0174ae094"
+      },
+      "verdict_bottleneck": "CPU",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
       "seen": 1,
-      "last_seen": 1783017437.1259942
+      "last_seen": 1783076575.5832715
+    },
+    {
+      "id": "f6e1f1a7defa7a5f-78710",
+      "db_name": "PRSHGYJI",
+      "signature": {
+        "bottleneck": "CPU",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "minor",
+        "dbt_pct": 21.3,
+        "aas_bad": 6.05,
+        "cpu_capacity_pct": 75.6,
+        "saturated": false,
+        "top_waits": [
+          "rdbms ipc message",
+          "px idle wait",
+          "space manager: slave idle wait",
+          "pmon timer"
+        ],
+        "hash": "f6e1f1a7defa7a5f"
+      },
+      "verdict_bottleneck": "CPU",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 2,
+      "last_seen": 1783076750.1471367
+    },
+    {
+      "id": "80bab5ffcfc53c57-78949",
+      "db_name": "MEJPRDDB",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "Mixed\u2192I/O",
+        "dbt_bucket": "flat",
+        "dbt_pct": -96.7,
+        "aas_bad": 44.41,
+        "cpu_capacity_pct": 92.5,
+        "saturated": true,
+        "top_waits": [
+          "px idle wait",
+          "rdbms ipc message",
+          "db cpu",
+          "db file sequential read"
+        ],
+        "hash": "80bab5ffcfc53c57"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1783084878.9495554
+    },
+    {
+      "id": "1ae73099a0c31407-30840",
+      "db_name": "PRNEI77C",
+      "signature": {
+        "bottleneck": "I/O",
+        "severity": "critical",
+        "shift": "CPU\u2192I/O",
+        "dbt_bucket": "minor",
+        "dbt_pct": 24.4,
+        "aas_bad": 1.65,
+        "cpu_capacity_pct": 5.2,
+        "saturated": false,
+        "top_waits": [
+          "px idle wait",
+          "space manager: slave idle wait",
+          "rdbms ipc message",
+          "pmon timer"
+        ],
+        "hash": "1ae73099a0c31407"
+      },
+      "verdict_bottleneck": "I/O",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 1,
+      "last_seen": 1783086030.8408086
+    },
+    {
+      "id": "d4e50d1107109ead-60234",
+      "db_name": "ADSTS2DB",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "Commit\u2192Concurrency",
+        "dbt_bucket": "major",
+        "dbt_pct": 76.2,
+        "aas_bad": 651.15,
+        "cpu_capacity_pct": 1808.7,
+        "saturated": true,
+        "top_waits": [
+          "free buffer waits",
+          "log file sync",
+          "space manager: slave idle wait",
+          "enq: fb - contention"
+        ],
+        "hash": "d4e50d1107109ead"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 2,
+      "last_seen": 1783088498.6679394
+    },
+    {
+      "id": "5b660873f72f6491-16041",
+      "db_name": "ADSPRDDB",
+      "signature": {
+        "bottleneck": "Concurrency",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "minor",
+        "dbt_pct": 24.4,
+        "aas_bad": 651.15,
+        "cpu_capacity_pct": 1808.7,
+        "saturated": true,
+        "top_waits": [
+          "free buffer waits",
+          "log file sync",
+          "space manager: slave idle wait",
+          "enq: fb - contention"
+        ],
+        "hash": "5b660873f72f6491"
+      },
+      "verdict_bottleneck": "Concurrency",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 2,
+      "last_seen": 1783091691.7161753
+    },
+    {
+      "id": "b70e6dc79e4c16f5-2588",
+      "db_name": "ALBPRDDB",
+      "signature": {
+        "bottleneck": "Mixed",
+        "severity": "critical",
+        "shift": "CPU\u2192Mixed",
+        "dbt_bucket": "extreme",
+        "dbt_pct": 1102.1,
+        "aas_bad": 303.08,
+        "cpu_capacity_pct": 582.8,
+        "saturated": true,
+        "top_waits": [
+          "enq: hw - contention",
+          "px idle wait",
+          "rdbms ipc message",
+          "db cpu"
+        ],
+        "hash": "b70e6dc79e4c16f5"
+      },
+      "verdict_bottleneck": "Mixed",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 2,
+      "last_seen": 1783091749.7781622
+    },
+    {
+      "id": "b56af636d9dde1a0-78662",
+      "db_name": "TSYVV780",
+      "signature": {
+        "bottleneck": "CPU",
+        "severity": "critical",
+        "shift": "",
+        "dbt_bucket": "flat",
+        "dbt_pct": -9.3,
+        "aas_bad": 1.55,
+        "cpu_capacity_pct": 19.4,
+        "saturated": false,
+        "top_waits": [
+          "rdbms ipc message",
+          "space manager: slave idle wait",
+          "pmon timer",
+          "class slave wait"
+        ],
+        "hash": "b56af636d9dde1a0"
+      },
+      "verdict_bottleneck": "CPU",
+      "verdict_severity": "critical",
+      "confirmed": false,
+      "confirmed_root_cause": "",
+      "source": "live",
+      "novel": false,
+      "seen": 2,
+      "last_seen": 1783342461.1631942
     }
   ],
-  "updated": 1783067331.8893154
+  "updated": 1783342461.1658328
 }

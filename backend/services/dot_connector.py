@@ -202,7 +202,23 @@ def analyze_awr_data(data: dict) -> list[dict[str, Any]]:
             top1_execs = top1.get("executions", 0)
             top1_per_exec = top1.get("elapsed_time_secs", 0) / top1_execs if top1_execs > 0 else top1.get("elapsed_time_secs", 0)
 
-            if top1_execs > 1000 and top1_per_exec < 1:
+            # Single-execution confidence discount — mirrors the compare-mode
+            # SQL ranking scorer's discount (executions<=1 -> reliability caveat).
+            # A single-execution SQL dominating elapsed time is frequently a
+            # top-level batch-job dispatcher/wrapper block (AWR attributes the
+            # ENTIRE job's wall-clock time to one top-level cursor) or an ad-hoc
+            # one-shot statement, not necessarily "the" problem query — do not
+            # report it as a confirmed concentration finding without that caveat.
+            single_exec_caveat = top1_execs == 1
+
+            if single_exec_caveat:
+                root = (
+                    f"SQL {top1.get('sql_id','?')} ran only once but accounts for {top1_pct:.0f}% of DB Time. "
+                    f"A single-execution statement dominating elapsed time is often a top-level batch-job "
+                    f"dispatcher/wrapper (AWR attributes the whole job's runtime to it) rather than the actual "
+                    f"regressed statement — inspect the SQL text for a step-dispatch pattern before tuning it directly."
+                )
+            elif top1_execs > 1000 and top1_per_exec < 1:
                 root = (
                     f"SQL {top1.get('sql_id','?')} executes {top1_execs:,} times at {top1_per_exec:.3f}s each. "
                     f"This is a high-frequency lightweight query — the volume is the problem, not the query itself. "
@@ -217,8 +233,8 @@ def analyze_awr_data(data: dict) -> list[dict[str, Any]]:
                 root = f"Top SQL {top1.get('sql_id','?')}: {top1_execs} executions at {top1_per_exec:.2f}s each."
 
             insights.append({
-                "severity": "critical" if top1_pct > 50 else "warning",
-                "title": f"Top SQL Dominating DB Time ({top1_pct:.0f}%)",
+                "severity": "warning" if single_exec_caveat else ("critical" if top1_pct > 50 else "warning"),
+                "title": f"Top SQL Dominating DB Time ({top1_pct:.0f}%)" + (" — verify not a job wrapper" if single_exec_caveat else ""),
                 "summary": (
                     f"Top 1 SQL consumes {top1_pct:.0f}% of DB Time, top 3 consume {top3_pct:.0f}%. "
                     f"{'Severe concentration — fix these and overall performance improves dramatically.' if top3_pct > 60 else 'Significant concentration in few SQL statements.'}"

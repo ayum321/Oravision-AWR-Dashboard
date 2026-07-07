@@ -97,8 +97,13 @@ class SqlRegression(BaseModel):
     sql_module: str = ""
     sql_action: str = ""   # AWR SQL statistics Action column
     # IMP2 — oracle maintenance flag
-    source_category: str = ""  # "Application" | "Oracle Maintenance" | "Ad-hoc / DBA" | module name
+    source_category: str = ""  # "Application" | "Oracle Maintenance" | "Ad-hoc / DBA" | "Batch Dispatcher" | module name
     is_oracle_maintenance: bool = False
+    # Deterministic batch-job dispatcher/wrapper detection (structural: a
+    # step-name IF/ELSIF literal-comparison chain that dominates the window at
+    # a single execution). Excluded from new_bottleneck/Highest-Focus
+    # candidacy downstream — see comparator._is_batch_dispatcher.
+    is_batch_dispatcher: bool = False
     addm_referenced: bool = False     # referenced by ADDM finding
     tag: str = "stable"  # new_offender | regression | load_increase | improved | stable
     good_elapsed_secs: float = 0.0

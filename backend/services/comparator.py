@@ -178,6 +178,37 @@ def _is_platform_scheduler(module: str, sql_text: str) -> bool:
     return False
 
 
+def _is_batch_dispatcher(
+    sql_text: str,
+    module: str,
+    executions: int,
+    elapsed_secs: float,
+    total_dbtime_secs: float,
+) -> bool:
+    """Detect a top-level batch-job dispatcher/wrapper block (a PL/SQL step-name
+    IF/ELSIF chain driven by a job-control variable) so it is never mistaken for
+    the application SQL that actually caused a regression. The tell is
+    STRUCTURAL, not content-based: real business SQL does not hardcode a job's
+    step name as a literal string-comparison chain — that shape only shows up
+    in a wrapper/orchestrator block that dispatches to named steps.
+
+    A dispatcher block also tends to dominate the elapsed-time window because
+    AWR attributes the ENTIRE job's wall-clock time (including every step it
+    calls) to this one top-level cursor, at a single execution count — which is
+    exactly the shape that let one such block outrank the real regressed SQL
+    underneath it (single execution, huge %DB time, looks like "the new SQL").
+    """
+    text = sql_text or ""
+    has_dispatch_pattern = text.count("ELSIF '") + text.count("IF '") >= 5
+    is_top_level_wrapper = "v_job_id" in text.lower() or "pkg_job" in text.lower()
+    dominates_window = (
+        total_dbtime_secs > 0
+        and elapsed_secs > 0.3 * total_dbtime_secs
+        and executions == 1
+    )
+    return has_dispatch_pattern and (is_top_level_wrapper or dominates_window)
+
+
 # ---------------------------------------------------------------------------
 # Generic SQL-type + parallelism detection (any SQL, any AWR pair).
 # Not tied to a specific SQL_ID/table — pure text-shape rules so the same
@@ -782,7 +813,22 @@ def _compare_wait_events(
             # signals — a pure latency blowup (e.g. avg wait doubling into the
             # hundreds of ms) is just as diagnostic as a volume spike, and must
             # not be diluted to a single generic point among six signals.
-            confidence_signals += 2 if bad_avg_ms >= 500.0 else 1
+            # A LARGE latency blowup (>=500ms) backed by a solid sample
+            # (bad_total_waits>=30, i.e. not a snapshot-boundary artifact) gets
+            # the full +3 — this is a genuine, confirmed regression, not a
+            # single-signal footnote. Without this tier, a pure-latency
+            # bottleneck (share/occurrence count flat, only per-wait duration
+            # doubling) structurally caps at confidence 0.5 pre-discount and can
+            # never clear the 0.6 "critical" gate no matter how extreme the
+            # latency spike is — verified against a real incident where avg
+            # wait went 4731ms->8712ms (+84%) across 87 occurrences and still
+            # landed at confidence 0.4, hiding a DBA-confirmed root cause.
+            if bad_avg_ms >= 500.0 and bad_total_waits >= 30:
+                confidence_signals += 3
+            elif bad_avg_ms >= 500.0:
+                confidence_signals += 2
+            else:
+                confidence_signals += 1
         if extreme_wait_flag:
             confidence_signals += 1
         if bad_pct > 20.0:
@@ -795,11 +841,19 @@ def _compare_wait_events(
         # session is still waiting, so a single occurrence can post an absurd
         # multi-minute "average". Such rows must not carry the same confidence as
         # a high-occurrence, statistically stable wait.
+        # Tiers narrowed from a single "<100 -> x0.8" bucket to "<30 -> x0.8" —
+        # the artifact this discount targets is a THIN sample (a handful of
+        # occurrences), not any count under 100. A 30-99 occurrence wait within
+        # one AWR snapshot window is a real, statistically solid measurement,
+        # not a boundary artifact, and should not carry a blanket 20% haircut.
+        # The <=1 and <10 tiers are unchanged — those were verified against a
+        # real single-occurrence snapshot-boundary artifact (enq: KO at
+        # confidence 0.062, ranked last) and must keep discounting thin samples.
         if bad_total_waits <= 1:
             confidence *= 0.25
         elif bad_total_waits < 10:
             confidence *= 0.5
-        elif bad_total_waits < 100:
+        elif bad_total_waits < 30:
             confidence *= 0.8
         # Idle/background waits carry no diagnostic confidence as foreground
         # bottlenecks. Both branches are CAPS ONLY (never a floor) so the sample-size
@@ -972,6 +1026,7 @@ def _compare_sql_stats(
     bad_data: dict,
     good_elapsed_min: float,
     bad_elapsed_min: float,
+    bad_db_time_secs: float = 0.0,
 ) -> list[SqlRegression]:
     good_sql = good_data.get("sql_stats", [])
     bad_sql = bad_data.get("sql_stats", [])
@@ -1047,6 +1102,18 @@ def _compare_sql_stats(
         _full_or_trunc_text = sql_text_full or sql_text_truncated_str or sql_text
         is_dml = _is_dml(_full_or_trunc_text)
         parallel_degree = _parallel_degree(_full_or_trunc_text)
+
+        # Batch-dispatcher/wrapper detection — deterministic, structural (see
+        # _is_batch_dispatcher docstring). Checked AFTER _classify_source so it can
+        # override a generic "Application" (BEGIN/DECLARE) classification with a
+        # more specific one; a dispatcher gets excluded from new_bottleneck/
+        # Highest-Focus candidacy downstream the same way Platform/Scheduler SQL
+        # already is, without ever needing a per-job hardcoded exception.
+        is_batch_dispatcher = _is_batch_dispatcher(
+            _full_or_trunc_text, sql_module, bad_execs, bad_elapsed, bad_db_time_secs,
+        )
+        if is_batch_dispatcher:
+            source_cat = "Batch Dispatcher"
 
         # IMP3
         plan_verdict = _compute_plan_verdict(plan_changed, good_avg, bad_avg)
@@ -1224,6 +1291,7 @@ def _compare_sql_stats(
             sql_action=sql_action,
             is_dml=is_dml,
             parallel_degree=parallel_degree,
+            is_batch_dispatcher=is_batch_dispatcher,
         ))
 
     # Phase 4 — Sort regressions by severity first, then absolute impact
@@ -3011,6 +3079,7 @@ def compare_periods(good_data: dict, bad_data: dict) -> ComparisonReport:
     sql_regressions = _compare_sql_stats(
         good_data, bad_data,
         good_summary.elapsed_min, bad_summary.elapsed_min,
+        bad_summary.db_time_secs,
     )
     efficiency_comparisons = _compare_efficiency(good_data, bad_data)
     logon_storm_explanation = _detect_logon_storm(good_data, bad_data)
