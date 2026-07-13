@@ -3087,19 +3087,26 @@ const WAIT_EVENT_MECHANISM = {
             + 'single chain absorbs all the traffic.',
     },
     'library cache lock': {
-        tldr: 'Check for hard-parse volume and unshared SQL first (missing bind variables, literal-heavy dynamic SQL) \u2014 this is almost always a shared-pool churn problem, not a shared-pool SIZE problem.',
+        tldr: 'Two distinct causal shapes produce this wait \u2014 (1) hard-parse/unshared-SQL churn (missing bind variables), or (2) a DDL/stats-gather operation stuck invalidating cursors because a DIFFERENT, unrelated session (often ad-hoc/UI, not the DDL session itself) still holds a cursor/pin on the same object. Check whether a maintenance/stats job is active in the same window BEFORE assuming this is a bind-variable problem.',
         full: 'A session needs a lock on a library cache object \u2014 a cursor, package, or other shared SQL area \u2014 that '
-            + 'is currently locked by another session, typically because that object is being parsed, compiled, '
-            + 'or invalidated. The most common driver is an application generating SQL with embedded literals '
-            + 'instead of bind variables, which forces a hard parse (and a fresh library cache object) for every '
-            + 'slightly different statement text, multiplying lock/pin churn across the shared pool. DDL on '
-            + 'objects referenced by hot, frequently-executed SQL is the other common trigger \u2014 it invalidates '
-            + 'every dependent cursor at once.',
-        risk: 'Growing the shared pool treats the symptom, not the cause, if the real driver is literal SQL \u2014 the '
-            + 'churn simply continues at a larger scale. Confirm via V$SQL (a large number of near-identical '
-            + 'FORCE_MATCHING_SIGNATURE groups differing only by literal values) before deciding between: fixing '
-            + 'the application to use bind variables, or restricting DDL on hot objects to maintenance windows. '
-            + 'CURSOR_SHARING=FORCE is a stopgap, not a substitute for fixing the application.',
+            + 'is currently locked by another session. Two different mechanisms produce this, and they need OPPOSITE '
+            + 'fixes: (1) an application generating SQL with embedded literals instead of bind variables forces a hard '
+            + 'parse (and a fresh library cache object) for every slightly different statement text, multiplying '
+            + 'lock/pin churn across the shared pool \u2014 this is a workload-shape problem. (2) A DDL or stats-gather '
+            + '(DBMS_STATS) operation on hot, frequently-executed objects must take this same lock to invalidate every '
+            + 'dependent cursor at once \u2014 but it cannot do that while ANY other session still holds an open cursor/pin '
+            + 'on that object, even a completely unrelated ad-hoc or UI query with no DDL privileges of its own. In that '
+            + 'shape, the wait shows up against the DDL/maintenance session, and the fix is on the OTHER session '
+            + '(the one holding the cursor), not on the DDL/stats step \u2014 rescheduling stats gathering that is already '
+            + 'correctly scheduled does nothing if a long-running ad-hoc query keeps colliding with it.',
+        risk: 'Do not default to "grow the shared pool" or "move the DDL to a maintenance window" without first checking '
+            + 'which shape this is. Confirm via V$SQL (large numbers of near-identical FORCE_MATCHING_SIGNATURE groups '
+            + 'differing only by literal values \u2014 shape 1) versus DBA_DDL_LOCKS / V$SESSION joined on the same object '
+            + '(a long-running non-DDL session already holding the cursor when the maintenance job started \u2014 shape 2). '
+            + 'For shape 1: fix the application to use bind variables; CURSOR_SHARING=FORCE is a stopgap only. For shape '
+            + '2: identify and govern/stagger the session holding the cursor (it is very often an ad-hoc/UI/reporting '
+            + 'query, not a scheduled job) so it does not overlap the maintenance/batch window \u2014 the maintenance step '
+            + 'itself is the victim here, not the cause.',
     },
     'gc buffer busy': {
         tldr: 'In RAC, this is buffer busy waits\' cluster-wide sibling \u2014 check whether the SAME block is hot across MULTIPLE instances (needs affinity/partitioning) versus hot within one instance (needs the local buffer-busy fix) before proposing a change.',
@@ -3480,6 +3487,21 @@ function buildAWRContext(data) {
         const _sr = _sqlRegBySqlId[_sqlIdKey];
         sqlRegistry[_sqlIdKey].isBatchDispatcher = !!(_sr && _sr.is_batch_dispatcher);
         sqlRegistry[_sqlIdKey].sourceCategory = _sr ? (_sr.source_category || '') : '';
+        // Field triage checklist verdict (comparator.py _classify_long_running —
+        // "Methods to Detect Long Running SQLs": compare vs historical runtime,
+        // check volume proportionality, check plan/DOP change, check wait-
+        // absorption, else escalate to "check live execution progress").
+        // EXPECTED_SLOW | LONG_RUNNING | CRITICAL_ABNORMAL | '' (not a regression).
+        sqlRegistry[_sqlIdKey].longRunningVerdict = _sr ? (_sr.long_running_verdict || '') : '';
+        sqlRegistry[_sqlIdKey].longRunningReason = _sr ? (_sr.long_running_reason || '') : '';
+        // Degree-of-Parallelism change between periods — computed backend-side from
+        // EACH period's OWN sql text (comparator.py), so it catches a DOP change even
+        // when plan_hash itself did not change. Was previously computed but NEVER
+        // joined onto the frontend at all — invisible everywhere, including the
+        // Highest-Focus/Critical-SQL-Focus ranking engine (_priorityScore) below.
+        sqlRegistry[_sqlIdKey].dopChanged = !!(_sr && _sr.dop_changed);
+        sqlRegistry[_sqlIdKey].goodParallelDegree = _sr ? (_sr.good_parallel_degree || 0) : 0;
+        sqlRegistry[_sqlIdKey].badParallelDegree = _sr ? (_sr.bad_parallel_degree || 0) : 0;
     }
 
     // --- ADDM Findings ---
@@ -4362,7 +4384,7 @@ const WAIT_EVENT_CATALOG = {
     fixAction: 'Fix is object-specific: (1) Sequence header block: ALTER SEQUENCE ... CACHE 1000 to batch allocations. (2) Index right-growing leaf (monotonic PK): hash-partition the index or rebuild as REVERSE KEY. (3) Lookup table header: move to application-level cache to eliminate DB reads entirely. (4) General: reduce logical reads per execution on the hot SQL (better access path, result cache for read-only lookups).',
   },
   'cursor: pin S wait on X': {
-    mechanism: 'Oracle mutex serialisation — one session holds the cursor mutex in Exclusive mode (hard parse in progress: CBO evaluation, statistics load, access-plan generation) while all other sessions needing the same cursor queue in Shared mode. The waiting sessions are not computing — they are blocked behind the compile lock. DB CPU appears high at the same time because the Exclusive holder is consuming CPU running the Cost-Based Optimizer. This is not a SQL execution problem; it is a cursor-compile contention problem. Oracle replaced library cache latches with per-cursor mutexes in 10g. Each mutex is a 64-bit SGA word: high 32 bits = shared reference count (incrementing atomically for each Shared holder), low 32 bits = Exclusive holder SID. Under high concurrency, many sessions arriving at the same SQL simultaneously trigger a thundering-herd on the same mutex — all blocked behind the one session doing the hard parse.',
+    mechanism: 'Oracle mutex serialisation — one session holds the cursor mutex in Exclusive mode (hard parse in progress: CBO evaluation, statistics load, access-plan generation) while all other sessions needing the same cursor queue in Shared mode. The waiting sessions are not computing — they are blocked behind the compile lock. DB CPU appears high at the same time because the Exclusive holder is consuming CPU running the Cost-Based Optimizer. This is not a SQL execution problem; it is a cursor-compile contention problem. Oracle replaced library cache latches with per-cursor mutexes in 10g. Each mutex is a 64-bit SGA word: high 32 bits = shared reference count (incrementing atomically for each Shared holder), low 32 bits = Exclusive holder SID. Under high concurrency, many sessions arriving at the same SQL simultaneously trigger a thundering-herd on the same mutex — all blocked behind the one session doing the hard parse. Library cache lock\'s sibling shape also applies here: if a stats-gather/DDL step is the one WAITING for the Exclusive pin (not the one holding it), the actual blocker is whichever unrelated session still holds a Shared pin on that cursor — identify that session before assuming the maintenance job itself needs rescheduling.',
     waitClass: 'Concurrency',
     diagnosticMetrics: ['hard_parses', 'soft_parse_pct'],
     addmKeywords: ['Mutex', 'Cursor Pin', 'Hard Parse', 'Cursor Contention', 'cursor: pin S wait on X'],
@@ -4424,18 +4446,18 @@ const WAIT_EVENT_CATALOG = {
       medium_latency: 'Avg 10–20ms: Borderline. Check redo log storage contention. Review redo log member count.',
       low_latency: 'Avg <10ms: Storage is fine. High wait COUNT = too many small commits. Batch commits (every 50–100 rows, not every row).',
     },
-    fixQuery: "-- Step 1: Commit rate and redo volume\nSELECT name, value FROM v$sysstat\nWHERE name IN ('user commits','user rollbacks','redo size','redo writes')\nORDER BY name;\n\n-- Step 2: Redo log file I/O (check for slow storage)\nSELECT group#, bytes/1024/1024 mb, members, status FROM v$log ORDER BY group#;",
-    fixExpect: 'Commits/sec > 200 AND avg wait < 10ms = batch commit issue. Commits/sec any rate AND avg wait > 20ms = storage issue.',
-    fixAction: 'IF avg wait >20ms: validate redo log storage latency via V$IOSTAT_FILE (log file parallel write avg ms). IF avg wait <10ms: batch commits in application (50-100 rows per COMMIT). IF switching rapidly: check current redo log group sizes and switch frequency in V$LOG_HISTORY.',
+    fixQuery: "-- Step 1: Commit rate and redo volume\nSELECT name, value FROM v$sysstat\nWHERE name IN ('user commits','user rollbacks','redo size','redo writes')\nORDER BY name;\n\n-- Step 2: Redo log file I/O (check for slow storage) + BLOCKSIZE (compare across\n-- groups and against the reference/prod environment — a mismatch forces a\n-- read-modify-write penalty on every redo write regardless of commit rate)\nSELECT group#, blocksize, bytes/1024/1024 mb, members, status FROM v$log ORDER BY group#;",
+    fixExpect: 'Commits/sec > 200 AND avg wait < 10ms = batch commit issue. Commits/sec any rate AND avg wait > 20ms = storage issue. BLOCKSIZE differing between groups, or vs the known-good/prod value = redo block-size misconfiguration.',
+    fixAction: 'IF avg wait >20ms: validate redo log storage latency via V$IOSTAT_FILE (log file parallel write avg ms) AND compare V$LOG.BLOCKSIZE against the reference environment — a mismatch means drop/recreate the redo logs at the correct block size. IF avg wait <10ms: batch commits in application (scale to the workload — a handful of rows/commit for OLTP row-by-row loops, 5,000-10,000+ rows/commit for a bulk/batch loader is normal and does not sacrifice recoverability). IF switching rapidly: check current redo log group sizes and switch frequency in V$LOG_HISTORY.',
   },
   'log file parallel write': {
     mechanism: 'LGWR writing redo to disk — storage latency on redo log members',
     waitClass: 'Commit',
     diagnosticMetrics: ['redo_size', 'transactions'],
     addmKeywords: ['Redo Log I/O'],
-    fixQuery: "-- Step 1: What is the actual write latency on redo log files?\nSELECT event,\n       total_waits,\n       ROUND(time_waited_micro / NULLIF(total_waits,0) / 1000, 2) AS avg_wait_ms,\n       ROUND(time_waited_micro / 1e6, 1) AS total_wait_secs\nFROM v$system_event\nWHERE event IN ('log file parallel write','log file sync',\n                'log file sequential read')\nORDER BY time_waited_micro DESC;\n\n-- Step 2 (11g+): Exact I/O stats per redo log member\nSELECT file_type, large_read_reqs, large_write_reqs,\n       ROUND(large_write_servicetime / NULLIF(large_write_reqs,0),2) AS avg_write_ms\nFROM v$iostat_file\nWHERE file_type = 'Log File'\nORDER BY large_write_servicetime DESC;\n\n-- Step 3: Redo log group sizing\nSELECT group#, bytes/1024/1024 mb, members, status\nFROM v$log ORDER BY group#;",
-    fixExpect: 'avg_wait_ms > 5 = storage bottleneck. Check v$iostat_file for per-member latency.',
-    fixAction: 'Place redo on fastest storage (SSD/NVMe). Size redo logs to switch every 15-20 min.',
+    fixQuery: "-- Step 1: What is the actual write latency on redo log files?\nSELECT event,\n       total_waits,\n       ROUND(time_waited_micro / NULLIF(total_waits,0) / 1000, 2) AS avg_wait_ms,\n       ROUND(time_waited_micro / 1e6, 1) AS total_wait_secs\nFROM v$system_event\nWHERE event IN ('log file parallel write','log file sync',\n                'log file sequential read')\nORDER BY time_waited_micro DESC;\n\n-- Step 2 (11g+): Exact I/O stats per redo log member\nSELECT file_type, large_read_reqs, large_write_reqs,\n       ROUND(large_write_servicetime / NULLIF(large_write_reqs,0),2) AS avg_write_ms\nFROM v$iostat_file\nWHERE file_type = 'Log File'\nORDER BY large_write_servicetime DESC;\n\n-- Step 3: Redo log group sizing + BLOCKSIZE (a block-size mismatch vs the\n-- storage sector size, or vs another environment, forces extra I/O work on\n-- every redo write independent of volume — check this BEFORE assuming the\n-- storage tier itself is simply slow)\nSELECT group#, blocksize, bytes/1024/1024 mb, members, status\nFROM v$log ORDER BY group#;",
+    fixExpect: 'avg_wait_ms > 5 = storage bottleneck. Check v$iostat_file for per-member latency. BLOCKSIZE inconsistent across groups or vs prod = redo misconfiguration, not a capacity problem.',
+    fixAction: 'Place redo on fastest storage (SSD/NVMe). Size redo logs to switch every 15-20 min. If BLOCKSIZE does not match the storage sector size or the reference environment, drop and recreate the redo logs at the correct block size — faster storage alone will not fix a block-size misalignment.',
   },
 
   // -- NETWORK ------------------------------------------------------
@@ -4661,13 +4683,13 @@ const WAIT_EVENT_CATALOG = {
     fixAction: 'Check redo buffer allocation retries in V$SYSSTAT and current log_buffer value in V$PARAMETER. Reduce commit frequency in application code.',
   },
   'library cache lock': {
-    mechanism: 'DDL or recompilation during execution — object invalidation cascade',
+    mechanism: 'Two shapes: (1) DDL/recompile invalidating cursors while app SQL waits, or (2) a DDL/stats-gather step (e.g. DBMS_STATS) waiting to invalidate cursors BECAUSE a different, unrelated session (often ad-hoc/UI, no DDL of its own) still holds a cursor/pin on the same object. Check which session actually holds the wait before assuming shape 1.',
     waitClass: 'Concurrency',
     diagnosticMetrics: ['hard_parses', 'library_hit_pct'],
     addmKeywords: ['Library Cache'],
-    fixQuery: "SELECT kglnaown owner, kglnaobj object, count(*) waiters\nFROM x$kgllk\nGROUP BY kglnaown, kglnaobj\nORDER BY 3 DESC FETCH FIRST 10 ROWS ONLY;",
-    fixExpect: 'Specific objects causing library cache lock contention.',
-    fixAction: 'Avoid DDL during peak hours. Use edition-based redefinition.',
+    fixQuery: "-- Step 1: who is ACTUALLY waiting, and on what object (do this first)\nSELECT s.sid, s.serial#, s.username, s.module, s.sql_id, s.blocking_session, s.event, s.seconds_in_wait\nFROM v$session s\nWHERE s.event LIKE 'library cache%'\nORDER BY s.seconds_in_wait DESC;\n\n-- Step 2: object-level lock holders (kglnaobj = the object being invalidated)\nSELECT kglnaown owner, kglnaobj object, count(*) waiters\nFROM x$kgllk\nGROUP BY kglnaown, kglnaobj\nORDER BY 3 DESC FETCH FIRST 10 ROWS ONLY;",
+    fixExpect: 'If the WAITING session is the DDL/stats job and a DIFFERENT, non-DDL session holds the object \u2014 shape 2 (see mechanism). If many distinct SQL_IDs differing only by literals are churning \u2014 shape 1.',
+    fixAction: 'Shape 1 (hard-parse/literal churn): bind variables in the application; CURSOR_SHARING=FORCE is a stopgap only. Shape 2 (maintenance blocked by a concurrent session): do NOT just move the DDL/stats job \u2014 identify the session holding the cursor (often ad-hoc/UI/reporting, not a scheduled job) and govern or stagger IT away from the maintenance window instead.',
   },
   'enq: WL - contention': {
     mechanism: 'Resource Manager workload group at session limit',
@@ -5827,8 +5849,8 @@ const WAIT_DIAG_ENGINE = {
     queries: [
       { id:'LGWR_LATENCY', step:1, label:'LGWR write performance — average and max latency',
         sql:"SELECT event, total_waits, total_timeouts,\n       ROUND(time_waited_micro/NULLIF(total_waits,0)/1000,2) AS avg_wait_ms\nFROM v$system_event\nWHERE event IN ('log file sync','log file parallel write',\n  'log file sequential read','switch logfile command')\nORDER BY time_waited_micro DESC" },
-      { id:'REDO_LOG_SIZE', step:2, label:'Online redo log configuration',
-        sql:"SELECT l.group#, l.members, l.status,\n       ROUND(f.bytes/1024/1024) AS size_mb, l.archived\nFROM v$log l JOIN v$logfile f ON f.group# = l.group#\nORDER BY l.group#" },
+      { id:'REDO_LOG_SIZE', step:2, label:'Online redo log configuration + block size (compare BLOCKSIZE across groups and against the reference/prod environment)',
+        sql:"SELECT l.group#, l.blocksize, l.members, l.status,\n       ROUND(f.bytes/1024/1024) AS size_mb, l.archived\nFROM v$log l JOIN v$logfile f ON f.group# = l.group#\nORDER BY l.group#" },
       { id:'COMMIT_RATE', step:3, label:'Commit frequency and redo stats',
         sql:"SELECT name, value FROM v$sysstat\nWHERE name IN ('user commits','user rollbacks','redo size',\n  'redo writes','redo write time','redo synch writes')\nORDER BY name" },
       { id:'COMMIT_CANDIDATES', step:4, label:'High-frequency short-transaction SQLs (batch commit pattern)',
@@ -6050,11 +6072,27 @@ const WAIT_DIAG_ENGINE = {
     ],
     interpret: (rows, meta) => {
       const findings = [];
+      const statsGathered = rows.some(r => r.operation && /gather/i.test(r.operation));
+      // A non-DDL/non-maintenance session already holding the cursor (query 3,
+      // 'Sessions currently holding cursor X pin') is the actual blocker in the
+      // shape where the stats-gather job is the one waiting, not the aggressor —
+      // previously this data was queried but never read by interpret(), so this
+      // finding could never fire even though the evidence was already collected.
+      const blocker = rows.find(r => r.sql_id && r.module && !/dbms_stats|dbms_scheduler|auto optimizer stats/i.test(r.module || ''));
       for (const r of rows) {
-        if (r.operation && /gather/i.test(r.operation)) findings.push({ severity:'WARN',
-          finding: 'Stats gather ran at ' + r.start_time + ' on ' + (r.target||''),
-          meaning: 'Statistics gather invalidates dependent cursors, causing pin S wait on X',
-          fix: 'Schedule stats gathers with NO_INVALIDATE=>AUTO_INVALIDATE outside peak hours' });
+        if (r.operation && /gather/i.test(r.operation)) {
+          if (blocker) {
+            findings.push({ severity:'WARN',
+              finding: 'Stats gather ran at ' + r.start_time + ' on ' + (r.target||'') + ', but session ' + (blocker.sid||'') + ' (module: ' + (blocker.module||'') + ') already held a pin on ' + (blocker.sql_id||'the same cursor'),
+              meaning: 'The stats gather is the one queued on the Exclusive pin here, waiting behind an unrelated session — not the other way around.',
+              fix: 'Do NOT just move the stats gather. Govern/stagger session ' + (blocker.sid||'') + ' (' + (blocker.module||'') + ') away from the maintenance window instead — it is the one holding the cursor.' });
+          } else {
+            findings.push({ severity:'WARN',
+              finding: 'Stats gather ran at ' + r.start_time + ' on ' + (r.target||''),
+              meaning: 'Statistics gather invalidates dependent cursors, causing pin S wait on X',
+              fix: 'Schedule stats gathers with NO_INVALIDATE=>AUTO_INVALIDATE outside peak hours' });
+          }
+        }
         if (r.version_count > 20) findings.push({ severity:'WARN',
           finding: 'SQL ' + (r.sql_id||'') + ' has ' + r.version_count + ' child cursors',
           meaning: 'Cursor version explosion — child cursors not merging',
@@ -6133,7 +6171,8 @@ const WAIT_DIAG_ENGINE = {
   },
 
   // ──────────────────────────────────────────────────────────────────────
-  // 14. LIBRARY CACHE LOCK — DDL during execution
+  // 14. LIBRARY CACHE LOCK — two shapes: hard-parse churn, OR a DDL/stats
+  // job stuck invalidating cursors behind an unrelated long-running session.
   // ──────────────────────────────────────────────────────────────────────
   'library cache lock': {
     trigger: (ctx) => {
@@ -6141,25 +6180,40 @@ const WAIT_DIAG_ENGINE = {
       return bad && (bad.pct_db_time || 0) > 1;
     },
     queries: [
-      { id:'DDL_SESSION', step:1, label:'Session performing DDL on the locked object',
+      { id:'DDL_SESSION', step:1, label:'Session actually IN the library cache wait right now',
         sql:"SELECT s.sid, s.username, s.program, s.module, s.event, s.state,\n       s.sql_id, sq.sql_text\nFROM v$session s\nLEFT JOIN v$sql sq ON sq.sql_id = s.sql_id\nWHERE s.wait_class = 'Concurrency' OR s.event LIKE 'library cache%'\nORDER BY s.seconds_in_wait DESC" },
-      { id:'CONCURRENT_DDL_CHECK', step:2, label:'Active DDL locks',
+      { id:'CONCURRENT_DDL_CHECK', step:2, label:'Active DDL locks (mode held vs requested)',
         sql:"SELECT l.session_id, l.lock_type, l.mode_held, l.mode_requested, l.lock_id1\nFROM dba_ddl_locks l\nWHERE l.mode_held != 'None'\nORDER BY l.session_id" },
+      { id:'CURSOR_HOLDER_CHECK', step:3, label:'Non-DDL session already holding a cursor/pin on the same object (the shape 2 blocker)',
+        sql:"SELECT s.sid, s.serial#, s.username, s.module, s.program, s.sql_id, s.logon_time,\n       ROUND((SYSDATE - s.logon_time)*1440,1) session_age_min\nFROM v$session s\nWHERE s.sql_id IN (\n  SELECT DISTINCT sql_id FROM v$sql WHERE UPPER(sql_text) LIKE '%' || :locked_object || '%'\n)\nAND s.status = 'ACTIVE'\nORDER BY s.logon_time ASC" },
     ],
     interpret: (rows, meta) => {
       const findings = [];
+      let sawExclusiveDdl = false;
       for (const r of rows) {
-        if (r.mode_held === 'Exclusive') findings.push({ severity:'CRITICAL',
-          finding: 'Exclusive lock held by session ' + r.session_id + ' on ' + (r.lock_id1||''),
-          meaning: 'DDL or recompile holds exclusive lock, blocking all executing sessions',
-          fix: 'Schedule DDL in maintenance windows. Never ALTER/DROP on busy objects during peak.' });
+        if (r.mode_held === 'Exclusive') {
+          sawExclusiveDdl = true;
+          findings.push({ severity:'CRITICAL',
+            finding: 'Exclusive lock held by session ' + r.session_id + ' on ' + (r.lock_id1||''),
+            meaning: 'DDL or recompile holds exclusive lock, blocking all executing sessions — shape 1 (DDL is the aggressor).',
+            fix: 'Schedule DDL in maintenance windows. Never ALTER/DROP on busy objects during peak.' });
+        }
+        if (r.mode_requested && r.mode_requested !== 'None' && r.mode_held !== 'Exclusive' && (r.lock_type || '').toUpperCase().includes('BODY')) {
+          findings.push({ severity:'CRITICAL',
+            finding: 'Session ' + r.session_id + ' is REQUESTING (not holding) a lock on ' + (r.lock_id1||'') + ' — it is the one waiting',
+            meaning: 'This is very often the DDL/stats-gather step itself queued behind an unrelated session that already holds a cursor/pin on the same object — shape 2 (a non-DDL session is the aggressor, the DDL/maintenance step is the victim).',
+            fix: 'Do NOT reschedule the DDL/stats step on this evidence alone. Run the CURSOR_HOLDER_CHECK query for the same object — identify and govern/stagger whichever session already holds the cursor (often ad-hoc/UI/reporting, not a scheduled job) so it does not overlap the maintenance window.' });
+        }
       }
       return findings;
     },
     narrative: (sql, findings) =>
-      'A DDL operation or recompile holds an exclusive library cache lock on an object ' +
-      'that many sessions are currently executing. All sessions must wait until DDL completes. ' +
-      (findings[0]?.fix || 'Schedule DDL outside peak execution windows.'),
+      (findings.some(f => (f.finding||'').includes('REQUESTING'))
+        ? 'The DDL/stats-gather step itself is the one queuing on library cache lock \u2014 it needs to invalidate cursors ' +
+          'dependent on an object but cannot while another, unrelated session still holds an open cursor/pin on it. '
+        : 'A DDL operation or recompile holds an exclusive library cache lock on an object that many sessions are ' +
+          'currently executing. All sessions must wait until DDL completes. ') +
+      (findings[0]?.fix || 'Confirm which session actually holds the wait before assuming DDL is the aggressor.'),
   },
 
   // ──────────────────────────────────────────────────────────────────────
@@ -7686,6 +7740,64 @@ function detectCausalPatterns(ctx, verdict) {
         }
     }
 
+    // ── Pattern 8b: Maintenance operation queued BEHIND a concurrent session ──
+    // Mirror-image of Pattern 8. WORKLOAD_COLLISION needs ≥3 distinct modules
+    // with ≥2 SQLs each — it can never fire on the much more common 2-way shape:
+    // exactly one maintenance/stats-gather step and one other session colliding
+    // via library cache lock / cursor pin. DBMS_STATS must take a library cache
+    // lock to invalidate every cursor dependent on the object it just gathered
+    // stats for, and cannot while another session — often ad-hoc/UI, not a
+    // scheduled job — still holds an open cursor/pin on that same object. A
+    // dedicated, precise gate is used here instead of just lowering Pattern 8's
+    // module-count threshold, since a blind 2-module drop would also fire on two
+    // unrelated modules with zero evidence they actually collided on anything.
+    // NOTE: the maintenance SQL is excluded from `candidates` upstream (culprit
+    // candidacy skips ORACLE_MAINTENANCE classification entirely), so it must be
+    // read directly from ctx.sqlRegistry, not from the candidates array.
+    {
+        const _libWait = badWaits.find(w => /library cache (lock|pin)|cursor:\s*pin s wait on x/i.test(w.event_name || ''));
+        const _libPct = _libWait ? (_libWait.pct_db_time || 0) : 0;
+        const _libSecs = _libWait ? (_libWait.time_waited_secs || 0) : 0;
+        if (_libWait && (_libPct >= 1 || _libSecs >= 60)) {
+            let _maintSql = null;
+            for (const sqlId in (ctx.sqlRegistry || {})) {
+                const entry = ctx.sqlRegistry[sqlId];
+                if (!entry.badEntry || entry.classification !== 'ORACLE_MAINTENANCE') continue;
+                const bad = entry.badEntry;
+                const badElapsed = (bad.perExec || 0) * (bad.executions || 0);
+                if (badElapsed < 30 && (bad.pctDbTime || 0) < 0.5) continue;
+                _maintSql = { sqlId, bad, elapsed: badElapsed, tables: (typeof extractTablesFromSQL === 'function' ? extractTablesFromSQL(bad.sqlText || '') : []) };
+                break;
+            }
+            if (_maintSql && _maintSql.tables.length) {
+                const _mTables = new Set(_maintSql.tables.map(t => t.toUpperCase()));
+                const _holder = candidates.find(c => {
+                    if (c.sqlId === _maintSql.sqlId) return false;
+                    if (c.classification === 'ORACLE_MAINTENANCE') return false;
+                    if (c.entry && c.entry.isBatchDispatcher) return false;
+                    const cTables = (c.tables || []).map(t => t.toUpperCase());
+                    if (!cTables.some(t => _mTables.has(t))) return false;
+                    return ((c.epeBad || 0) * (c.execsBad || 0)) >= 60 || (c.pctDb || 0) >= 1;
+                });
+                if (_holder) {
+                    const _module = _holder.module || 'an unidentified session';
+                    patterns.push({
+                        id: 'MAINTENANCE_CURSOR_BLOCK',
+                        label: 'Maintenance operation queued behind a concurrent session, not the reverse',
+                        confidence: _libPct >= 5 ? 'CONFIRMED' : 'PROBABLE',
+                        signals: [
+                            { icon: '🔒', text: `${_libWait.event_name} at ${n1(_libPct)}% of bad-period DB Time` },
+                            { icon: '🛠', text: `${_maintSql.sqlId} (maintenance/stats) referencing ${[..._mTables].slice(0,3).join(', ')}` },
+                            { icon: '⏱', text: `${_holder.sqlId} (module: ${_module}) ran long enough in the same window to hold the cursor/pin` },
+                        ],
+                        direction: `${_libWait.event_name} here means the MAINTENANCE step is waiting, not the application. After gathering stats (or a DDL), Oracle must take a library cache lock to invalidate every dependent cursor — it cannot do that while ${_holder.sqlId} (${_module}) still holds an active cursor/pin on the same object. Fix the session side (govern or stagger ${_module} away from the maintenance window) — do NOT reschedule the stats/DDL step, it is not the aggressor here.`,
+                        fixQuery: `-- Confirm the blocking chain live: who is really holding the cursor/pin\nSELECT s.sid, s.serial#, s.username, s.module, s.sql_id, s.blocking_session, s.event, s.seconds_in_wait\nFROM v$session s\nWHERE s.event LIKE 'library cache%' OR s.sql_id IN ('${_maintSql.sqlId}', '${_holder.sqlId}')\nORDER BY s.seconds_in_wait DESC;`,
+                    });
+                }
+            }
+        }
+    }
+
     // ── Pattern 9: Buffer cache warmup — buffer hit collapsed after restart/flush ─
     {
         const _bhGood = ctx.instanceEfficiency?.good?.buffer_cache_hit_pct || 0;
@@ -9015,6 +9127,14 @@ function buildDataDrivenVerdict(ctx) {
     // culprit candidacy. Only hard-exclude maintenance noise and disappeared SQL.
     // An impact-based minimum (addlSecs >= 0.5s OR pctDb >= 0.5%) prevents noise.
     const culpritCandidates = [];
+    // PL/SQL package/wrapper calls excluded from culprit candidacy below (same
+    // rationale as the Block B PACKAGE_WRAPPER gate in _priorityScore: a wrapper's
+    // reported time is the SUM of the inner SQL it executes, not a single tunable
+    // statement — naming it "ROOT CAUSE" is a double-count, not a real culprit).
+    // Collected here (not just skipped) so a materially-large excluded wrapper can
+    // still be surfaced as a one-line context note redirecting to its constituent
+    // SQL, instead of silently vanishing with no explanation.
+    const _plsqlWrapperExcluded = [];
     for (const sqlId in ctx.sqlRegistry) {
         const entry = ctx.sqlRegistry[sqlId];
         if (!entry.badEntry) continue;
@@ -9046,6 +9166,22 @@ function buildDataDrivenVerdict(ctx) {
                 /TOAD|SQL\*PLUS|SQLPLUS|SQL DEVELOPER|PLSQLDEV|PL\/SQL DEVELOPER/i.test(_mod) ||
                 (typeof _isPlatformSQL === 'function' && _isPlatformSQL({ module: _mod, sqlText: _txt }));
             if (_isPlatformOrTool) continue;
+        }
+        // PL/SQL wrapper/package-call exclusion — mirrors Block B's PACKAGE_WRAPPER
+        // gate (_priorityScore) so the headline and the ranked SQL list can never
+        // disagree about whether a wrapper is a legitimate culprit. A wrapper is a
+        // CONTAINER (BEGIN...END block, or CALL/EXEC pkg.proc) — its reported
+        // elapsed/DB-time is the sum of the inner SQL it drives, not a single
+        // tunable statement. Real, non-platform application PL/SQL still needs to
+        // be visible somewhere, so materially-large exclusions are collected for a
+        // one-line context-note redirect below (see contextNotes), not just dropped.
+        {
+            const _wTxt = bad.sqlText || good?.sqlText || '';
+            const _wMod = bad.module || good?.module || '';
+            if (typeof _getSQLType === 'function' && _getSQLType(_wTxt) === 'PLSQL') {
+                _plsqlWrapperExcluded.push({ sqlId, sqlText: _wTxt, module: _wMod, pctDb: bad.pctDbTime || 0 });
+                continue;
+            }
         }
         const isNew = !good;
         const epeGood = good ? good.perExec : 0;
@@ -9425,6 +9561,16 @@ function buildDataDrivenVerdict(ctx) {
 
     // -- Context notes (Block E) ----------------------------------
     const contextNotes = [];
+
+    // PL/SQL wrapper redirect — one materially-large excluded wrapper (>=1% DB
+    // time, same threshold as Block B's rollup) gets a single-line note pointing
+    // at its constituent SQL instead of silently disappearing from the verdict.
+    if (_plsqlWrapperExcluded.length > 0) {
+        const _topWrapper = _plsqlWrapperExcluded.slice().sort((a, b) => (b.pctDb || 0) - (a.pctDb || 0))[0];
+        if (_topWrapper.pctDb >= 1 && typeof _plsqlWrapperNote === 'function') {
+            contextNotes.push(_plsqlWrapperNote(_topWrapper.sqlId, _topWrapper.sqlText, _topWrapper.module).note);
+        }
+    }
 
     // Hidden regression alert (computed earlier during severity determination)
     if (disappearedDbTimePct >= 5 && adjustedDtChange > 5 && hiddenRegressions.length > 0) {
@@ -18500,6 +18646,31 @@ function generateComparisonAISummary(ctx) {
             }
         }
 
+        // ── Signal 14: Degree-of-Parallelism change — a candidate root cause for a
+        // runtime change even when plan_hash itself did NOT change (DOP is a runtime
+        // hint/session setting, not always reflected in the plan hash), per the field
+        // triage checklist ("Methods to Detect Long Running SQLs": check for changes
+        // in Degree of Parallelism). Backend-computed (comparator.py, each period's
+        // OWN sql text) and joined onto the candidate above — never re-derived here.
+        if (!isNew && c.dopChanged) {
+            score += 15;
+            signals.push(`DOP changed: PARALLEL(${c.goodParallelDegree||0}) → PARALLEL(${c.badParallelDegree||0})`);
+        }
+
+        // ── Signal 15: Field-checklist escalation — CRITICAL_ABNORMAL means the
+        // backend classifier (_classify_long_running) could not explain this SQL's
+        // slowdown from ANY structural signal available in this AWR pair (no plan
+        // change, no DOP change, no wait-absorption, volume growth doesn't explain
+        // it). That is itself a strong "needs investigation" signal, not silence —
+        // without this, a SQL with no other qualifying signal above could rank low
+        // or get suppressed even though the checklist explicitly flagged it as
+        // unexplained (as opposed to EXPECTED_SLOW, which is the opposite call and
+        // earns no bonus here).
+        if (c.longRunningVerdict === 'CRITICAL_ABNORMAL') {
+            score += 18;
+            signals.push('No structural cause found (plan/DOP/wait-absorption/volume all ruled out) — check live execution progress');
+        }
+
         // ── Sample-size reliability discount — mirrors comparator.py's wait-event
         // confidence discount (bad_total_waits<=1 -> x0.25, <10 -> x0.5). A SQL
         // backed by a SINGLE execution in the bad period — new OR existing — is a
@@ -18607,6 +18778,15 @@ function generateComparisonAISummary(ctx) {
                 rowsPerExecBad:  (_bad.rowsProcessed  != null && _bad.executions  > 0) ? (_bad.rowsProcessed  / _bad.executions)  : 0,
                 rowsPerExecGood: (_good?.rowsProcessed != null && _good?.executions > 0) ? (_good.rowsProcessed / _good.executions) : 0,
                 waitCorrelation: _entry.waitCorrelation || null,
+                // Field triage checklist verdict + DOP-change flag (comparator.py
+                // _classify_long_running / _sr.dop_changed) — joined onto the registry
+                // above, now threaded into the actual ranking candidate so the scorer
+                // below can weigh them, not just the SQL Analysis detail-panel note.
+                dopChanged: !!_entry.dopChanged,
+                goodParallelDegree: _entry.goodParallelDegree || 0,
+                badParallelDegree: _entry.badParallelDegree || 0,
+                longRunningVerdict: _entry.longRunningVerdict || '',
+                longRunningReason: _entry.longRunningReason || '',
                 addlSecs: _isNew
                     ? (_bad.perExec || 0) * (_bad.executions || 0)
                     : ((_bad.perExec || 0) - (_good?.perExec || 0)) * (_bad.executions || 0),
@@ -21659,6 +21839,59 @@ function _normalizeIncidentIndicator(inc) {
         kb_tags: [],
         kb_match: null,
     };
+}
+
+// Renders the deterministic "Performance-Architect" structural findings that the
+// backend scenario_detector produced (MERGE source complexity → materialise to
+// staging, MERGE full-scan on a large target → split UPSERT onto indexed keys,
+// PARALLEL(N) oversubscription, cascading delete, plan flip, stats collision,
+// honest-negative "not a DB problem", etc.). These arrive on compareData
+// .scenario_findings from /api/upload/compare. They are structural SQL/DML design
+// findings that the wait-event narrative (_wAlsoSeen, which only weaves
+// _source==='wait_class_relationship' entries) does NOT cover — without this they
+// have no render path and are silently dropped. Woven into the "Why It Happened"
+// block as compact, pinpointed rows (not a separate gallery), each carrying the
+// exact structural action a senior PE would take, plus a prior-incident fix when
+// the KB match is strong (>= 80%).
+function _buildStructuralScenarioHtml() {
+    try {
+        if (typeof compareData === 'undefined' || !compareData || !Array.isArray(compareData.scenario_findings)) return '';
+        const _sevRank = { critical: 0, warning: 1, info: 2 };
+        const _sevColor = { critical: '#ef4444', warning: '#f59e0b', info: '#64748b' };
+        const _sevLabel = { critical: 'CRITICAL', warning: 'REVIEW', info: 'NOTE' };
+        const findings = compareData.scenario_findings
+            .filter(f => f && f._source !== 'wait_class_relationship' && (f.why || f.confirm || f.title))
+            .sort((a, b) => (_sevRank[a.severity] ?? 3) - (_sevRank[b.severity] ?? 3))
+            .slice(0, 4);
+        if (!findings.length) return '';
+        const _row = (f) => {
+            const col = _sevColor[f.severity] || '#64748b';
+            const lbl = _sevLabel[f.severity] || 'NOTE';
+            const sqlTag = f.sql_id ? `<span style="font-family:ui-monospace,monospace;font-size:10px;color:#c084fc;background:rgba(192,132,252,0.1);padding:1px 6px;border-radius:4px;margin-left:6px">${esc(f.sql_id)}</span>` : '';
+            const tbls = (Array.isArray(f.tables) && f.tables.length)
+                ? `<span style="font-size:10px;color:#94a3b8;margin-left:6px">${f.tables.slice(0, 3).map(t => esc(t)).join(', ')}</span>` : '';
+            const why = f.why ? `<div style="font-size:12px;color:#cbd5e1;line-height:1.65;margin-top:5px">${esc(f.why)}</div>` : '';
+            const act = f.confirm ? `<div style="font-size:12px;color:#e2e8f0;line-height:1.6;margin-top:6px"><span style="color:${col};font-weight:800">\u2192 Action:</span> ${esc(f.confirm)}</div>` : '';
+            // Prior expert fix, only when the KB match cleared the 80% bar (link_kb).
+            const kb = (f.recommended_fix && (f.reference_confidence || 0) >= 0.8)
+                ? `<div style="font-size:11px;color:#34d399;line-height:1.55;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(52,211,153,0.25)"><span style="font-weight:800">Prior resolution</span> (${Math.round((f.reference_confidence || 0) * 100)}% match): ${esc(f.recommended_fix)}</div>`
+                : '';
+            return `<div style="padding:11px 14px;background:rgba(15,23,42,0.55);border:1px solid #1e293b;border-left:3px solid ${col};border-radius:8px;margin-bottom:8px">`
+                + `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">`
+                + `<span style="font-size:8.5px;font-weight:900;color:${col};letter-spacing:0.6px;background:${col}1a;padding:2px 7px;border-radius:10px">${lbl}</span>`
+                + `<span style="font-size:12.5px;font-weight:800;color:#f1f5f9">${esc(f.title || 'Structural finding')}</span>`
+                + sqlTag + tbls
+                + `</div>` + why + act + kb + `</div>`;
+        };
+        return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(165,180,252,0.14)">`
+            + `<div style="font-size:10.5px;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:1.1px;margin-bottom:10px;display:flex;align-items:center;gap:8px">`
+            + `<span style="display:inline-block;width:16px;height:2px;background:linear-gradient(90deg,#a5b4fc,transparent)"></span>`
+            + `Structural SQL / DML Findings`
+            + `<span style="font-size:10px;color:#64748b;font-weight:600;text-transform:none;letter-spacing:0.3px">\u2014 pinpointed design fixes, not wait tuning</span>`
+            + `</div>`
+            + findings.map(_row).join('')
+            + `</div>`;
+    } catch (e) { return ''; }
 }
 
 function renderComparisonRCA(ctx) {
@@ -26814,17 +27047,42 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
             ? `<strong>${esc(_slowestTs.tablespace_name||_slowestTs.ts_name||'')}</strong> (avg read ${_fw1(_slowestTs.avg_read_ms||0)}ms, ${_fw0(_slowestTs.reads||0)} reads)`
             : null;
 
+        // Keep Investigate First concise: show investigation direction only.
+        // Exact SQL should live in the dedicated query section.
+        const _summarizeInvestigateText = (raw) => {
+            if (!raw) return raw;
+            const _hadInlineSql = /\b(SELECT|WITH|EXEC)\b[\s\S]*?;/i.test(raw);
+            let _clean = String(raw)
+                .replace(/(?:\u2014|-)\s*(?:SELECT|WITH|EXEC)\b[\s\S]*?;/gi, '')
+                .replace(/\b(?:SELECT|WITH|EXEC)\b[\s\S]*?;/gi, '')
+                .replace(/\s+([,.;:!?])/g, '$1')
+                .replace(/\s{2,}/g, ' ')
+                .replace(/(:\s*){2,}/g, ': ')
+                .trim();
+            if (_hadInlineSql) {
+                const _pointer = ' Use the Pinpointed Query section for exact SQL.';
+                if (!_clean.includes(_pointer.trim())) _clean += _pointer;
+            }
+            return _clean;
+        };
+
         // ── Format helper: splits (1)/(2)/(3) steps into a numbered list ─────
         const _fmtAct = (raw) => {
+            raw = _summarizeInvestigateText(raw);
             const m = raw.search(/\s*\(1\)\s*/);
             if (m < 0) return raw;
             const intro = raw.slice(0, m);
             const rest  = raw.slice(m);
-            const items = rest.split(/\s*\(\d+\)\s*/).filter(Boolean);
+            const itemsAll = rest.split(/\s*\(\d+\)\s*/).filter(Boolean);
+            const items = itemsAll.slice(0, 3);
+            const hasOverflow = itemsAll.length > 3;
             return `<div style="margin-bottom:8px">${intro}</div>`
                 + `<ol style="margin:0;padding-left:18px;list-style-type:decimal">`
                 + items.map(t => `<li style="margin-bottom:8px;line-height:1.65">${t.trimEnd()}</li>`).join('')
-                + `</ol>`;
+                + `</ol>`
+                + (hasOverflow
+                    ? `<div style="margin-top:8px;font-size:11px;color:#86efac">Additional diagnostic SQL and deep checks are in Pinpointed Query.</div>`
+                    : '');
         };
 
         const _volStep = (_volGrowthSig && _volTable)
@@ -27414,6 +27672,7 @@ Validate: physical reads/s and db file scattered/sequential read % DB Time drop 
               + `${_inThisCaseHtml}`)+
         `${_corrChipsHtml}`+
         `${_causalPatBlockOut}`+
+        `${_buildStructuralScenarioHtml()}`+
         `${_dt.isPureDML ? _dmlFalsHtml : _falsHtml}`+
         `</div>`;
 
@@ -29709,12 +29968,28 @@ class SQLComparisonEngine {
         if (evidenceScore >= 60) confidence = 'HIGH';
         else if (evidenceScore >= 35) confidence = 'MEDIUM';
 
+        // PL/SQL package/wrapper demotion — applied LAST so it overrides whatever
+        // the regression/plan-change logic above computed. A wrapper's elapsed
+        // time is the sum of the inner SQL it drives, so it can look like a
+        // severe regression by raw numbers alone while not being a tunable
+        // statement at all. Demote to INFO/LOW so it can never win top rank
+        // (criticalCommon filter + severity sort in findCommonSqls/generateReport)
+        // — mirrors the same demotion Block B's PACKAGE_WRAPPER gate applies.
+        let wrapperNote = '';
+        if (typeof _getSQLType === 'function' && _getSQLType(b.sqlText || '') === 'PLSQL') {
+            severity = 'INFO';
+            status = 'PLSQL_WRAPPER';
+            evidenceScore = Math.min(evidenceScore, 15);
+            confidence = 'LOW';
+            if (typeof _plsqlWrapperNote === 'function') wrapperNote = _plsqlWrapperNote(b.sqlId, b.sqlText, b.module).note;
+        }
+
         return { sqlId:b.sqlId, status, severity, good:g, bad:b,
             epeD, epsD, rowsDelta,
             cpuRatioDelta: { good:parseFloat((g.cpuRatio*100).toFixed(1)), bad:parseFloat((b.cpuRatio*100).toFixed(1)), delta:parseFloat((cpuRatioDelta*100).toFixed(1)) },
             planChanged, plan1:g.planHash, plan2:b.planHash,
             plan1Src: g.planHashSrc||'', plan2Src: b.planHashSrc||'',
-            evidenceScore, confidence,
+            evidenceScore, confidence, wrapperNote,
             supportingSections, appearedIn, ashSupports,
             category: 'common',
             sortKey: Math.max(Math.abs(epeD.deltaPercent), Math.abs(epsD.deltaPercent)) };
@@ -29770,8 +30045,22 @@ class SQLComparisonEngine {
                 if (b.elapsedPerExec < 0.001 && b.executions > 100000) {
                     results.push({ sqlId:id, status:'HIGH_FREQUENCY_TRIVIAL', severity:'INFO', bad:b, category:'bad_only', evidenceScore, confidence, appearedIn, supportingSections, ashSupports:hasASH });
                 } else {
-                    const sev = b.pctDbTime > 10 ? 'CRITICAL' : b.elapsedPerExec > 1 ? 'WARNING' : 'INFO';
-                    results.push({ sqlId:id, status:'NEW_IN_PROBLEM', severity:sev, bad:b, category:'bad_only', evidenceScore, confidence, appearedIn, supportingSections, ashSupports:hasASH });
+                    let sev = b.pctDbTime > 10 ? 'CRITICAL' : b.elapsedPerExec > 1 ? 'WARNING' : 'INFO';
+                    let newStatus = 'NEW_IN_PROBLEM';
+                    let newEvidenceScore = evidenceScore;
+                    let newConfidence = confidence;
+                    let wrapperNote = '';
+                    // Same PL/SQL wrapper demotion as _compareSingle — a wrapper that is
+                    // merely NEW in the bad period is still a container, not a tunable
+                    // statement, so it must not win 'CRITICAL new workload' billing either.
+                    if (typeof _getSQLType === 'function' && _getSQLType(b.sqlText || '') === 'PLSQL') {
+                        sev = 'INFO';
+                        newStatus = 'PLSQL_WRAPPER';
+                        newEvidenceScore = Math.min(newEvidenceScore, 15);
+                        newConfidence = 'LOW';
+                        if (typeof _plsqlWrapperNote === 'function') wrapperNote = _plsqlWrapperNote(id, b.sqlText, b.module).note;
+                    }
+                    results.push({ sqlId:id, status:newStatus, severity:sev, bad:b, category:'bad_only', evidenceScore:newEvidenceScore, confidence:newConfidence, wrapperNote, appearedIn, supportingSections, ashSupports:hasASH });
                 }
             }
         });
@@ -29875,6 +30164,8 @@ function _stTag(status) {
         DISAPPEARED:        {label:'DISAPPEARED',        cls:'sql-tag-improved'},
 
         STABLE:             {label:'STABLE',             cls:'sql-tag-stable'},
+
+        PLSQL_WRAPPER:      {label:'PL/SQL WRAPPER',     cls:'sql-tag-stable'},
 
     };
 
@@ -29997,6 +30288,16 @@ function _extractTableNames(sqlText) {
 
     (txt.match(/\bDELETE\s+FROM\s+([\w.$"]+)/g)||[]).forEach(m => add(clean(m.replace(/\bDELETE\s+FROM\s+/,''))));
 
+    // DBMS_STATS.GATHER_TABLE_STATS(ownname=>'X', tabname=>'Y') / positional('OWNER','TABLE')
+    // and ALTER TABLE/INDEX <name> — without these, a stats-gather/DDL call's target
+    // object is invisible to any table-name cross-reference (e.g. the maintenance-vs-
+    // concurrent-session collision pattern), even though the name is right there in the text.
+    (txt.match(/\bTABNAME\s*=>\s*'([A-Z_$][A-Z0-9_$#]*)'/g)||[]).forEach(m => { const mm = m.match(/'([A-Z_$][A-Z0-9_$#]*)'/); if (mm) add(clean(mm[1])); });
+
+    (txt.match(/GATHER_TABLE_STATS\s*\(\s*'[^']*'\s*,\s*'([A-Z_$][A-Z0-9_$#]*)'/g)||[]).forEach(m => { const mm = m.match(/,\s*'([A-Z_$][A-Z0-9_$#]*)'\s*$/); if (mm) add(clean(mm[1])); });
+
+    (txt.match(/\bALTER\s+(?:TABLE|INDEX)\s+([\w.$"]+)/g)||[]).forEach(m => add(clean(m.replace(/\bALTER\s+(?:TABLE|INDEX)\s+/,''))));
+
     return [...tables].slice(0,8);
 
 }
@@ -30009,10 +30310,35 @@ const _REGISTRY_COLOR_MAP = {
     ORACLE_MAINTENANCE: '#64748b', DISAPPEARED: '#475569', STABLE: '#34d399',
 };
 function _resolveClassification(sqlId, sqlEntry, isNew) {
+    // PL/SQL package/wrapper calls are container statements — must be checked
+    // FIRST, before AWRContext.sqlRegistry's generic classification (which has
+    // no PL/SQL awareness) or _classifySQLIssue's REGRESSION/PLAN_CHANGED
+    // branches — otherwise a wrapper's inflated elapsed time (the sum of every
+    // inner statement it drives) gets the exact same "tune this SQL" verdict
+    // as a real, directly-tunable statement. Single source of truth shared with
+    // the RCA Verdict headline via _plsqlWrapperNote().
+    const _rcSqlText = (isNew ? sqlEntry.bad?.sqlText : (sqlEntry.bad?.sqlText || sqlEntry.good?.sqlText)) || '';
+    if (typeof _getSQLType === 'function' && _getSQLType(_rcSqlText) === 'PLSQL') {
+        const _rcMod = (isNew ? sqlEntry.bad?.module : (sqlEntry.bad?.module || sqlEntry.good?.module)) || '';
+        const _rcNote = (typeof _plsqlWrapperNote === 'function') ? _plsqlWrapperNote(sqlId, _rcSqlText, _rcMod) : null;
+        return {
+            cls: 'PLSQL_WRAPPER', label: 'PL/SQL Wrapper — Tune Inner SQL', color: '#818cf8',
+            rec: (_rcNote && _rcNote.note) || 'PL/SQL package/procedure wrapper — tune the constituent SQL it calls, not this statement.',
+        };
+    }
     if (typeof AWRContext !== 'undefined' && AWRContext && AWRContext.sqlRegistry && AWRContext.sqlRegistry[sqlId]) {
         const reg = AWRContext.sqlRegistry[sqlId];
         const cat = reg.classification || 'STABLE';
-        return { cls: cat, label: cat.replace(/_/g,' '), color: _REGISTRY_COLOR_MAP[cat] || '#94a3b8', rec: '' };
+        // Field triage checklist verdict (see join site in buildAWRContext) — the
+        // registry branch otherwise always returns an EMPTY rec, so this is the
+        // only place a CRITICAL_ABNORMAL ("no structural cause found in this AWR
+        // pair — check live execution progress"), EXPECTED_SLOW ("proportional
+        // volume/work growth"), or LONG_RUNNING ("structural cause found") verdict
+        // would ever reach the SQL Analysis tab's per-row recommendation text.
+        const _lrv = reg.longRunningVerdict || '';
+        const _lrRec = (_lrv === 'CRITICAL_ABNORMAL' || _lrv === 'EXPECTED_SLOW' || _lrv === 'LONG_RUNNING') ? (reg.longRunningReason || '') : '';
+        return { cls: cat, label: cat.replace(/_/g,' '), color: _REGISTRY_COLOR_MAP[cat] || '#94a3b8', rec: _lrRec,
+                 longRunningVerdict: _lrv };
     }
     return _classifySQLIssue(sqlEntry, isNew);
 }
@@ -30370,6 +30696,28 @@ function _buildCommonRow(c, i) {
           '<span style="color:#e2e8f0;font-size:12px;font-weight:700;font-family:monospace">'+_modFull+'</span>'+
           _addmBadge+
         '</div>'+
+
+        // Field triage checklist verdict (long-running SQL triage: CRITICAL_ABNORMAL
+        // = no structural cause found in this AWR pair, check live execution
+        // progress; EXPECTED_SLOW = proportional to volume/work growth;
+        // LONG_RUNNING = a structural cause was identified (plan/DOP/wait/new SQL).
+        // _issue.rec is otherwise blank for registry-backed rows, so this is the
+        // only surface this verdict reaches per-row.
+        (_issue.rec
+            ? '<div style="margin-bottom:12px;padding:9px 12px;border-radius:6px;font-size:11.5px;line-height:1.6;'
+              + (_issue.longRunningVerdict === 'CRITICAL_ABNORMAL'
+                  ? 'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:#fca5a5'
+                  : (_issue.longRunningVerdict === 'EXPECTED_SLOW'
+                      ? 'background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.3);color:#a7f3d0'
+                      : 'background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);color:#fcd34d'))
+              + '"><span style="font-weight:800;text-transform:uppercase;letter-spacing:0.4px;font-size:9.5px">'
+              + (_issue.longRunningVerdict === 'CRITICAL_ABNORMAL'
+                  ? '\u26a0 No structural cause found \u2014 check live progress'
+                  : (_issue.longRunningVerdict === 'EXPECTED_SLOW'
+                      ? '\u2713 Expected slow \u2014 proportional to volume/work growth'
+                      : '\u26a0 Long-running with structural cause identified'))
+              + '</span><div style="margin-top:4px;color:#cbd5e1">' + esc(_issue.rec) + '</div></div>'
+            : '') +
 
         '<div style="display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start">'+
 
@@ -30752,6 +31100,27 @@ function _extractPackageName(sqlText, module) {
     const mod = (module || '').trim();
     if (mod && !/^(SQL\*PLUS|SQLPLUS|TOAD|JDBC( THIN)?|ORACLE|PLSQLDEV)/i.test(mod)) return mod;
     return '';
+}
+
+// Single-source-of-truth one-line explainer for PL/SQL package/procedure wrapper
+// calls, shared by: the RCA Verdict headline (buildDataDrivenVerdict's
+// _plsqlWrapperExcluded context-note redirect), the SQL Analysis tab
+// (_resolveClassification, below), and available for any future consumer that
+// needs to explain the same "wrapper is a superset, tune the subset" fact
+// without re-deriving its own wording. A wrapper's reported elapsed/DB-time is
+// the SUM of the inner SQL it drives — the wrapper is the SUPERSET, the inner
+// statements are the tunable SUBSET — so it must never be prioritized or
+// marked as an RCA culprit itself; the note always redirects to the package's
+// constituent SQL instead.
+function _plsqlWrapperNote(sqlId, sqlText, module) {
+    const _pkg = (typeof _extractPackageName === 'function') ? _extractPackageName(sqlText, module) : '';
+    const _pkgLabel = _pkg ? ' (' + _pkg + ')' : '';
+    return {
+        note: (sqlId || 'This SQL') + _pkgLabel + ' is a PL/SQL package/procedure wrapper \u2014 its reported '
+            + 'time is the sum of the inner SQL it executes (the wrapper is a superset, not a single tunable '
+            + 'statement); do not prioritize or tune the wrapper itself \u2014 focus on the constituent SQL '
+            + 'statements called inside ' + (_pkg || 'this package') + ', which are the actual tunable subset.',
+    };
 }
 
 // ── Stats-relevance gate ────────────────────────────────────────────────────
@@ -34450,7 +34819,7 @@ function renderSingleWaitAnalysis(ctx) {
                 'cursor: pin S wait on X':    { mechanism:'Shared cursor invalidated — one session recompiles exclusively while all others wait for the shared pin. Usually caused by statistics gather or DDL on dependent objects.', hypothesis:'Operations-driven — auto stats job or DDL ran during peak, invalidating hot cursors.', crossCheck:['Hard Parses/sec (spike confirms invalidation)','Parse Time CPU','Library Cache Hit %'], awrConfirm:['SELECT log_id, operation, target, start_time, end_time FROM dba_optstat_operations WHERE start_time > SYSDATE - 1 ORDER BY start_time DESC','SELECT sql_id, loads, version_count FROM v$sqlarea WHERE loads > 5 ORDER BY loads DESC FETCH FIRST 10 ROWS ONLY'] },
                 'resmgr:cpu quantum':         { mechanism:'Resource Manager CPU throttling — sessions are runnable but capped by the active resource plan consumer group limits.', hypothesis:'Configuration-driven — resource plan restricting CPU allocation for the application consumer group.', crossCheck:['Host CPU % (may show available capacity)','Active Sessions (queued vs running)','Resource Plan directives'], awrConfirm:['SELECT consumer_group_name, active_sessions, queue_length, cpu_waits FROM v$rsrc_consumer_group ORDER BY active_sessions DESC','SELECT plan, group_or_subplan, cpu_p1, max_active_sess_target_p1 FROM dba_rsrc_plan_directives WHERE plan = (SELECT value FROM v$parameter WHERE name=\'resource_manager_plan\')'] },
                 'read by other session':      { mechanism:'Physical read sharing — multiple sessions request the same block from disk simultaneously. Session A reads; sessions B,C,D wait for it to land in buffer cache.', hypothesis:'Volume-driven — same blocks needed by concurrent queries but not in buffer cache. Undersized cache or large scan patterns.', crossCheck:['Physical Reads/sec','Buffer Cache Hit %','db file sequential read (often co-occurs)'], awrConfirm:['SELECT p1 file_no, p2 block_no, COUNT(*) waiters FROM v$session_wait WHERE event=\'read by other session\' GROUP BY p1, p2 ORDER BY waiters DESC','SELECT name, value FROM v$parameter WHERE name LIKE \'%cache_size%\''] },
-                'library cache lock':         { mechanism:'DDL or recompile holds exclusive library cache lock — all sessions executing dependent objects must wait until the exclusive holder releases.', hypothesis:'Operations-driven — DDL (ALTER/DROP/GRANT) or package recompile on a hot object during peak execution.', crossCheck:['Hard Parses/sec','Parse Time CPU','Concurrency wait class total'], awrConfirm:['SELECT session_id, lock_type, mode_held, mode_requested, lock_id1 FROM dba_ddl_locks WHERE mode_held != \'None\' ORDER BY session_id','SELECT sid, event, sql_id, seconds_in_wait FROM v$session WHERE event LIKE \'library cache%\' ORDER BY seconds_in_wait DESC'] },
+                'library cache lock':         { mechanism:'Two shapes: (1) DDL/recompile holds an exclusive lock while dependent sessions wait, OR (2) a DDL/stats-gather step (DBMS_STATS) is the one WAITING, because it needs to invalidate cursors but an unrelated, non-DDL session (often ad-hoc/UI, no DDL of its own) already holds an open cursor/pin on the same object.', hypothesis:'Check which session the wait is actually against first. If it is the maintenance/stats job itself waiting \u2014 shape 2: the fix is on the OTHER session (govern/stagger it away from the batch window), not on rescheduling the already-correctly-scheduled stats job.', crossCheck:['Hard Parses/sec (shape 1 signal)','Concurrency wait class total','Whether a DBMS_STATS/maintenance SQL is elevated in the same window (shape 2 signal)'], awrConfirm:['SELECT session_id, lock_type, mode_held, mode_requested, lock_id1 FROM dba_ddl_locks WHERE mode_held != \'None\' ORDER BY session_id','SELECT sid, event, sql_id, module, blocking_session, seconds_in_wait FROM v$session WHERE event LIKE \'library cache%\' ORDER BY seconds_in_wait DESC'] },
                 'latch: cache buffers chains':{ mechanism:'Hot buffer latch — a single buffer block is accessed so frequently its hash-chain latch serialises concurrent accessors.', hypothesis:'Access-driven — one or more SQLs reading the same small set of blocks millions of times.', crossCheck:['Logical Reads/sec (very high)','Buffer Gets per exec of top SQL','CBC latch miss rate'], awrConfirm:['SELECT addr, gets, misses, sleeps, ROUND(misses/NULLIF(gets,0)*100,2) miss_pct FROM v$latch_children WHERE name=\'cache buffers chains\' ORDER BY sleeps DESC FETCH FIRST 5 ROWS ONLY','SELECT sql_id, buffer_gets, ROUND(buffer_gets/NULLIF(executions,0)) gets_per_exec FROM v$sql ORDER BY buffer_gets DESC FETCH FIRST 10 ROWS ONLY'] },
             };
             const topAnalysis = ev2.filter(e => !/idle|DB CPU/i.test(e.event_name||'')).slice(0,4);
